@@ -19,6 +19,7 @@ uses
   PasDoc_Utils,
   PasDoc_GenHtml,
   PasDoc_GenSimpleXML,
+  PasDoc_GenMarkdown,
   PasDoc_GenLatex,
   PasDoc_GenHtmlHelp,
   PasDoc_GenPHP,
@@ -431,6 +432,11 @@ procedure TPasdocOptions.InterpretCommandline(PasDoc: TPasDoc);
     Result := Generator;
   end;
 
+  function SetMarkdownOptions(Generator: TMarkdownDocGenerator): TDocGenerator;
+  begin
+    Result := Generator;
+  end;
+
   function SetPHPOptions(Generator: TPHPDocGenerator): TDocGenerator;
   begin
     Result := Generator;
@@ -487,6 +493,10 @@ begin
   if OptionFormat.Value = 'simplexml' then
   begin
     PasDoc.Generator := SetSimpleXMLOptions(TSimpleXMLDocGenerator.Create(PasDoc));
+  end else
+  if OptionFormat.Value = 'markdown' then
+  begin
+    PasDoc.Generator := SetMarkdownOptions(TMarkdownDocGenerator.Create(PasDoc));
   end else
   if OptionFormat.Value = 'latex' then
   begin
