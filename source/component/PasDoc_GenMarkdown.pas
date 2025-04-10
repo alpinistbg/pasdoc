@@ -45,6 +45,7 @@ type
   TMarkdownDocGenerator = class(TDocGenerator)
   protected
     function CodeString(const S: String): String; override;
+    function CodeWithLinks(const AItem: TPasItem; const ACode: String): String;
     function ConvertString(const S: String): String; override;
     function ConvertChar(C: Char): String; override;
     procedure WriteUnit(const HL: Integer; const U: TPasUnit); override;
@@ -94,13 +95,12 @@ uses
 
 function AppSep(S1, S2, ASep: String): String;
 begin
-  if S2 <> '' then
-    Result := S1 + IfThen(S1 <> '', ASep) + S2
-  else
-    Result := S1;
+  if S2 <> ''
+    then Result := S1 + IfThen(S1 <> '', ASep) + S2
+    else Result := S1;
 end;
 
-function IsML(S: String): Boolean;
+function IsML(S: String): Boolean; // Multiline?
 begin
   Result := PosSet(LineEnding, S) > 0;
 end;
@@ -130,15 +130,47 @@ end;
 function TMarkdownDocGenerator.MakeItemLink(const Item: TBaseItem;
   const LinkCaption: string; const LinkContext: TLinkContext): string;
 begin
-  Result := //inherited MakeItemLink(Item, LinkCaption, LinkContext);
-    '[' + LinkCaption + '](#' + Item.QualifiedName + ')';
+  Result := '[' + LinkCaption + '](#' + Item.QualifiedName + ')';
 end;
 
 function TMarkdownDocGenerator.CodeString(const S: String): String;
 begin
   if IsML(S)
-    then Result := '```' + IfThen(not StartsStr(LineEnding, S), LineEnding) + S + LineEnding + '```' + LineEnding
+    then Result := '```' + IfThen(not StartsStr(LineEnding, S), LineEnding) + S
+      + LineEnding + '```' + LineEnding
     else Result := '`' + S + '`';
+end;
+
+function TMarkdownDocGenerator.CodeWithLinks(const AItem: TPasItem;
+  const ACode: String): String;
+const
+  IdentDelims: TSysCharSet = [Low(TSysCharSet)..High(TSysCharSet)] -
+    ['.', '_', '0'..'9', 'A'..'Z', 'a'..'z'];
+  IdentNonStart: TSysCharSet = ['.', '0'..'9'];
+var
+  P: Integer = 1;
+  FoundPos: Integer;
+  S, LinkText: String;
+  FoundItem: TBaseItem;
+begin
+  Result := ACode;
+  repeat
+    FoundPos := P;
+    S := ExtractSubstr(Result, P, IdentDelims);
+    if S.IsEmpty or (S[1] in IdentNonStart) then
+      Break;
+    FoundItem := SearchItem(S, AItem, False);
+    if Assigned(FoundItem) then
+    begin
+      LinkText := MakeItemLink(FoundItem, S, lcNormal);
+      if not LinkText.IsEmpty then
+      begin
+        Result := Copy(Result, 1, FoundPos - 1) + LinkText +
+          Copy(Result, FoundPos + Length(S), MaxInt); // Replace with the link
+        Inc(P, Length(LinkText) - Length(S)); // Adjust the extract position
+      end;
+    end;
+  until S.IsEmpty;
 end;
 
 function TMarkdownDocGenerator.ConvertString(const S: String): String;
@@ -175,7 +207,7 @@ begin
 
   DoMessage(2, pmtInformation, 'Writing Docs for unit "%s"', [U.Name]);
   FIndent := HL;
-  WriteDirectLine(Hn() + 'Unit ' + U.Name + LineEnding);  //ConvertString(U.SourceFileName));
+  WriteDirectLine(Hn() + 'Unit ' + U.Name + LineEnding);
 
   if U.HasDescription then
     WritePara(ItemDescription(U));
@@ -183,40 +215,142 @@ begin
   // Used units
   if WriteUsesClause and not IsEmpty(U.UsesUnits) then
   begin
+    WriteDirectLine(Hn(+1) + 'Uses');
     S := '';
     for I := 0 to Pred(U.UsesUnits.Count) do
-      S := AppSep(S, U.UsesUnits[I], ', ');
-    WritePara(LineEnding + 'Uses' + LineEnding + ': ' + S);
+      WriteDirectLine('- ' + U.UsesUnits[I]);
   end;
 
-  WriteDirectLine(LineEnding);
   WriteDirectLine(LineEnding);
 
   Indent;
 
-  // Global constants
-  for I := 0 to U.Constants.Count - 1 do
-    WriteConstant(U.Constants.PasItemAt[I]);
+  WriteDirectLine(Hn() + 'Overview');
+  WriteDirectLine(LineEnding);
 
-  // Global types
-  for I := 0 to u.Types.Count - 1 do
-    WriteType(U.Types.PasItemAt[I]);
+  Indent;
 
-  // Global classes
-  for I := 0 to U.CIOs.Count - 1 do
-    WriteStructure(U.CIOs.PasItemAt[I] as TPasCIO);
-
-  // Global functions
-  if U.FuncsProcs.Count > 0 then
+  if U.CIOs.Count > 0 then
   begin
-    for I := 0 to Pred(U.FuncsProcs.Count) do
-      WriteRoutine(U.FuncsProcs.PasItemAt[I] as TPasRoutine);
+    WriteDirectLine(Hn() + 'Classes, Interfaces, Objects and Records');
+    WriteDirectLine('| Name | Description |' + LineEnding + '|---|---|');
+    for I := 0 to Pred(U.CIOs.Count) do
+      with U.CIOs.PasItemAt[I] as TPasCIO do
+        WritePara(
+        '|' + CioTypeToString(MyType) + ' ' + MakeItemLink(U.CIOs.PasItemAt[I], Name, lcNormal) +
+        '|' + AbstractDescription +
+        '|');
+    WriteDirectLine(LineEnding);
   end;
 
-  // Global vars
-  for I := 0 to U.Variables.Count - 1 do
-    WriteVariable(U.Variables.PasItemAt[I]);
+  if U.FuncsProcs.Count > 0 then
+  begin
+    WriteDirectLine(Hn() + 'Functions and Procedures');
+    WriteDirectLine('| Name | Description |' + LineEnding + '|---|---|');
+    for I := 0 to Pred(U.FuncsProcs.Count) do
+      with U.FuncsProcs.PasItemAt[I] as TPasRoutine do
+        WritePara(
+          '|' + ReplaceStr(FullDeclaration, Name, MakeItemLink(U.FuncsProcs.PasItemAt[I], Name, lcNormal) ) +
+          '|' + AbstractDescription +
+          '|');
+    WriteDirectLine(LineEnding);
+  end;
 
+  if U.Types.Count > 0 then
+  begin
+    WriteDirectLine(Hn() + 'Types');
+    WriteDirectLine('| Name | Description |' + LineEnding + '|---|---|');
+    for I := 0 to Pred(U.Types.Count) do
+      with U.Types.PasItemAt[I] as TPasType do
+        WritePara(
+          '|' + //ReplaceStr(FullDeclaration, Name, MakeItemLink(U.Types.PasItemAt[I], Name, lcNormal) ) +
+                CodeWithLinks(U, FullDeclaration) +
+          '|' + AbstractDescription +
+          '|');
+    WriteDirectLine(LineEnding);
+  end;
+
+  if U.Constants.Count > 0 then
+  begin
+    WriteDirectLine(Hn() + 'Constants');
+    WriteDirectLine('| Name | Description |' + LineEnding + '|---|---|');
+    for I := 0 to Pred(U.Constants.Count) do
+      with U.Constants.PasItemAt[I] as TPasConstant do
+        WritePara(
+          '|' + ReplaceStr(FullDeclaration, Name, MakeItemLink(U.Constants.PasItemAt[I], Name, lcNormal) ) +
+          '|' + AbstractDescription +
+          '|');
+    WriteDirectLine(LineEnding);
+  end;
+
+  if U.Variables.Count > 0 then
+  begin
+    WriteDirectLine(Hn() + 'Variables');
+    WriteDirectLine('| Name | Description |' + LineEnding + '|---|---|');
+    for I := 0 to Pred(U.Variables.Count) do
+      with U.Variables.PasItemAt[I] do
+        WritePara(
+          '|' + ReplaceStr(FullDeclaration, Name, MakeItemLink(U.Variables.PasItemAt[I], Name, lcNormal) ) +
+          '|' + AbstractDescription +
+          '|');
+    WriteDirectLine(LineEnding);
+  end;
+
+  UnIndent;
+
+  WriteDirectLine(Hn() + 'Description');
+  WriteDirectLine(LineEnding);
+
+  Indent;
+
+  if U.CIOs.Count > 0 then
+  begin
+    WriteDirectLine(Hn() + 'Classes, Interfaces, Objects and Records');
+    WriteDirectLine(LineEnding);
+    for I := 0 to Pred(U.CIOs.Count) do
+      WriteStructure(U.CIOs.PasItemAt[I] as TPasCIO);
+    WriteDirectLine(LineEnding);
+  end;
+
+  if U.FuncsProcs.Count > 0 then
+  begin
+    WriteDirectLine(Hn() + 'Functions and Procedures');
+    WriteDirectLine(LineEnding);
+    for I := 0 to Pred(U.FuncsProcs.Count) do
+      WriteRoutine(U.FuncsProcs.PasItemAt[I] as TPasRoutine);
+    WriteDirectLine(LineEnding);
+  end;
+
+  if U.Types.Count > 0 then
+  begin
+    WriteDirectLine(Hn() + 'Types');
+    WriteDirectLine(LineEnding);
+    for I := 0 to Pred(U.Types.Count) do
+      WriteType(U.Types.PasItemAt[I] as TPasType);
+    WriteDirectLine(LineEnding);
+  end;
+
+  if U.Constants.Count > 0 then
+  begin
+    WriteDirectLine(Hn() + 'Constants');
+    WriteDirectLine(LineEnding);
+    for I := 0 to Pred(U.Constants.Count) do
+      WriteConstant(U.Constants.PasItemAt[I] as TPasConstant);
+    WriteDirectLine(LineEnding);
+  end;
+
+  if U.Variables.Count > 0 then
+  begin
+    WriteDirectLine(Hn() + 'Variables');
+    WriteDirectLine(LineEnding);
+    for I := 0 to Pred(U.Variables.Count) do
+      WriteVariable(U.Variables.PasItemAt[I]);
+    WriteDirectLine(LineEnding);
+  end;
+
+  UnIndent;
+
+  UnIndent;
 end;
 
 procedure TMarkdownDocGenerator.WriteExternalCore(
@@ -339,7 +473,7 @@ end;
 
 procedure TMarkdownDocGenerator.WriteConstant(const Item: TPasItem);
 begin
-  WritePara(Hn() + 'Constant ' + ConvertString(Item.Name) + LineEnding);
+  WritePara(Hn() + 'Constant ' + ConvertString(Item.Name) + ' {#' + Item.QualifiedName + '}' + LineEnding);
   WriteDirectLine(
     //'| - | - |' + LineEnding +
     '| name | ' + ConvertString(Item.Name) + ' |' + LineEnding +
@@ -355,7 +489,7 @@ end;
 
 procedure TMarkdownDocGenerator.WriteVariable(const Item: TPasItem);
 begin
-  WritePara(Hn() + 'Variable ' + ConvertString(Item.Name) + LineEnding);
+  WritePara(Hn() + 'Variable ' + ConvertString(Item.Name) + ' {#' + Item.QualifiedName + '}' + LineEnding);
   WriteDirectLine(
     '| | |' + LineEnding + '|---|---|' + LineEnding +
     '| var name | ' + ConvertString(Item.Name) + ' |' + LineEnding +
@@ -379,7 +513,7 @@ procedure TMarkdownDocGenerator.WriteType(const Item: TPasItem);
   end;
 
 begin
-  WritePara(Hn() + 'Type ' + ConvertString(Item.Name) + LineEnding);
+  WritePara(Hn() + 'Type ' + ConvertString(Item.Name) + ' {#' + Item.QualifiedName + '}' + LineEnding);
   WriteDirectLine(
     '| | |' + LineEnding + '|---|---|' + LineEnding +
     '| type name | ' + ConvertString(item.Name) + ' |' + LineEnding +
@@ -405,7 +539,7 @@ procedure TMarkdownDocGenerator.WriteStructure(const Item: TPasCIO);
 var
   I: Integer;
 begin
-  WritePara(Hn() + CioTypeToString(Item.MyType) + ' ' + ConvertString(Item.Name) + LineEnding);
+  WritePara(Hn() + CioTypeToString(Item.MyType) + ' ' + ConvertString(Item.Name) + ' {#' + Item.QualifiedName + '}' + LineEnding);
 
   WriteDirectLine(
     '| | |' + LineEnding + '|---|---|' + LineEnding +
@@ -453,7 +587,7 @@ end;
 
 procedure TMarkdownDocGenerator.WriteProperty(const Item: TPasProperty);
 begin
-  WritePara(Hn() + 'Property ' + ConvertString(Item.Name) + LineEnding);
+  WritePara(Hn() + 'Property ' + ConvertString(Item.Name) + ' {#' + Item.QualifiedName + '}' + LineEnding);
   WriteDirectLine(
     '| | |' + LineEnding + '|---|---|' + LineEnding +
     '| property name | ' + ConvertString(Item.name) + ' |' + LineEnding +
@@ -483,13 +617,11 @@ end;
 procedure TMarkdownDocGenerator.Indent;
 begin
   Inc(FIndent);
-  FPara := 'p' + StringOfChar('(', FIndent) + '. ';
 end;
 
 procedure TMarkdownDocGenerator.UnIndent;
 begin
   Dec(FIndent);
-  FPara := 'p' + StringOfChar('(', FIndent) + '. ';
 end;
 
 function TMarkdownDocGenerator.Hn(AIn: Integer): String;
