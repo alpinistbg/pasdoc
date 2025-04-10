@@ -25,7 +25,7 @@
       <local>
         <CommandLineParams Value="@testopt.txt printec_pos.pas -v 6"/>
         <LaunchingApplication PathPlusParams="\usr\X11R6\bin\xterm -T &apos;Lazarus Run Output&apos; -e $(LazarusDir)\tools\runwait.sh $(TargetCmdLine)"/>
-        <WorkingDirectory Value="\home\alpi\_\pasdoc\bin"/>
+        <WorkingDirectory Value="C:\AI\_\pasdoc\bin"/>
       </local>
       <FormatVersion Value="2"/>
       <Modes Count="1">
@@ -33,7 +33,7 @@
           <local>
             <CommandLineParams Value="@testopt.txt printec_pos.pas -v 6"/>
             <LaunchingApplication PathPlusParams="\usr\X11R6\bin\xterm -T &apos;Lazarus Run Output&apos; -e $(LazarusDir)\tools\runwait.sh $(TargetCmdLine)"/>
-            <WorkingDirectory Value="\home\alpi\_\pasdoc\bin"/>
+            <WorkingDirectory Value="C:\AI\_\pasdoc\bin"/>
           </local>
         </Mode0>
       </Modes>
@@ -49,7 +49,7 @@
         <IsPartOfProject Value="True"/>
         <TopLine Value="30"/>
         <CursorPos X="10" Y="61"/>
-        <UsageCount Value="58"/>
+        <UsageCount Value="60"/>
         <Loaded Value="True"/>
       </Unit0>
     </Units>
@@ -88,6 +88,15 @@
     </Other>
   </CompilerOptions>
   <Debugging>
+    <BreakPoints Count="1">
+      <Item1>
+        <Kind Value="bpkSource"/>
+        <WatchScope Value="wpsLocal"/>
+        <WatchKind Value="wpkWrite"/>
+        <Source Value="..\component\PasDoc_GenMarkdown.pas"/>
+        <Line Value="563"/>
+      </Item1>
+    </BreakPoints>
     <Exceptions Count="2">
       <Item1>
         <Name Value="ECodetoolError"/>

@@ -541,40 +541,111 @@ var
 begin
   WritePara(Hn() + CioTypeToString(Item.MyType) + ' ' + ConvertString(Item.Name) + ' {#' + Item.QualifiedName + '}' + LineEnding);
 
-  WriteDirectLine(
-    '| | |' + LineEnding + '|---|---|' + LineEnding +
-    '| structure name | ' + ConvertString(Item.name) + ' |' + LineEnding +
-    '| name_with_generic | ' + ConvertString(Item.NameWithGeneric) + ' |' + LineEnding +
-    '| type | ' + ConvertString(CioTypeToString(Item.MyType)) + ' |' + LineEnding +
-    '| visibility | ' + VisToStr(Item.visibility) + ' |');
+  WritePara(
+  ' [' + 'Description' + '](#' + Item.QualifiedName + '-desc' + ')' +
+  ' [' + 'Hierarchy' + '](#' + Item.QualifiedName + '-hier' + ')' +
+  ' [' + 'Fields' + '](#' + Item.QualifiedName + '-fields' + ')' +
+  ' [' + 'Methods' + '](#' + Item.QualifiedName + '-mths' + ')' +
+  ' [' + 'Properties' + '](#' + Item.QualifiedName + '-props' + ')');
+
+    //WriteDirectLine(
+    //'| | |' + LineEnding + '|---|---|' + LineEnding +
+    //'| structure name | ' + ConvertString(Item.name) + ' |' + LineEnding +
+    //'| name_with_generic | ' + ConvertString(Item.NameWithGeneric) + ' |' + LineEnding +
+    //'| type | ' + ConvertString(CioTypeToString(Item.MyType)) + ' |' + LineEnding +
+    //'| visibility | ' + VisToStr(Item.visibility) + ' |');
 
   Indent;
 
+  // No Item.FullDeclaration? How it is handled in HTML?
+  WritePara(Hn() + 'Declaration' + LineEnding);
+
+  FormatPascalCode(Item.FullDeclaration);
   WriteDirectLine(LineEnding);
+
+  WritePara(Hn() + 'Description ' + ' {#' + Item.QualifiedName + '-desc}' + LineEnding);
 
   if Item.HasDescription then
     WritePara(ItemDescription(Item));
-
   WriteDirectLine(LineEnding);
 
-  for I := 0 to Item.Ancestors.Count - 1 do
-    WriteDirectLine(
-      '| | |' + LineEnding + '|---|---|' + LineEnding +
-      '| ancestor name | ' + ConvertString(Item.Ancestors[I].Name) + ' |' + LineEnding +
-      '| declaration | ' + ConvertString(Item.Ancestors[I].Value) + ' |');
+  WritePara(Hn() + 'Hierarchy ' + ' {#' + Item.QualifiedName + '-hier}' + LineEnding);
 
-  for I := 0 to Item.Methods.Count - 1 do
-    with Item.Methods.PasItemAt[I] as TPasRoutine do
-      WriteDirectLine('- [' + Name + '](#' + QualifiedName + ')');
+  for I := 0 to Pred(Item.Ancestors.Count) do
+    //WriteDirectLine(
+    //  '| | |' + LineEnding + '|---|---|' + LineEnding +
+    //  '| ancestor name | ' + ConvertString(Item.Ancestors[I].Name) + ' |' + LineEnding +
+    //  '| declaration | ' + ConvertString(Item.Ancestors[I].Value) + ' |');
+    WriteDirectLine('- ' + Item.Ancestors[I].Name);
+  WriteDirectLine(LineEnding);
 
+  WritePara(Hn() + 'Overview' + LineEnding);
+
+  if Item.Fields.Count > 0 then
+  begin
+    WritePara(Hn(+1) + 'Fields ' + ' {#' + Item.QualifiedName + '-fields}' + LineEnding);
+    WriteDirectLine('|| Name | Description |' + LineEnding + '|---|:---|:---|');
+    for I := 0 to Pred(Item.Fields.Count) do
+      with Item.Fields.PasItemAt[I] do
+        WritePara(
+          '|' + '~(' + VisToStr(Visibility) + ')~' +
+          '|' + CodeWithLinks(Item, FullDeclaration) +
+          '|' + AbstractDescription +
+          '|');
+    WriteDirectLine(LineEnding);
+  end;
+
+  if Item.Methods.Count > 0 then
+  begin
+    WritePara(Hn(+1) + 'Methods ' + ' {#' + Item.QualifiedName + '-mths}' + LineEnding);
+    WriteDirectLine('|| Name | Description |' + LineEnding + '|---|:---|:---|');
+    for I := 0 to Pred(Item.Methods.Count) do
+      with Item.Methods.PasItemAt[I] as TPasRoutine do
+        WritePara(
+          '|' + '~(' + VisToStr(Visibility) + ')~' +
+          '|' + CodeWithLinks(Item, FullDeclaration) +
+          '|' + AbstractDescription +
+          '|');
+    WriteDirectLine(LineEnding);
+  end;
+
+  if Item.Properties.Count > 0 then
+  begin
+    WritePara(Hn(+1) + 'Properties ' + ' {#' + Item.QualifiedName + '-props}' + LineEnding);
+    WriteDirectLine('|| Name | Description |' + LineEnding + '|---|:---|:---|');
+    for I := 0 to Pred(Item.Properties.Count) do
+      with Item.Properties.PasItemAt[I] as TPasProperty do
+        WritePara(
+          '|' + '~(' + VisToStr(Visibility) + ')~' +
+          '|' + CodeWithLinks(Item, FullDeclaration) +
+          '|' + AbstractDescription +
+          '|');
+    WriteDirectLine(LineEnding);
+  end;
+
+
+  WritePara(Hn() + 'Fields' + LineEnding);
+
+  for I := 0 to Pred(Item.Fields.Count) do
+    WriteVariable(Item.Fields.PasItemAt[I]);
+  WriteDirectLine(LineEnding);
+
+  WritePara(Hn() + 'Methods' + LineEnding);
+
+  //for I := 0 to Item.Methods.Count - 1 do
+  //  with Item.Methods.PasItemAt[I] as TPasRoutine do
+  //    WriteDirectLine('- [' + Name + '](#' + QualifiedName + ')');
   for I := 0 to Item.Methods.Count - 1 do
     WriteRoutine(Item.Methods.PasItemAt[I] as TPasRoutine);
+  WriteDirectLine(LineEnding);
 
-  for I := 0 to Item.Fields.Count - 1 do
-    WriteVariable(Item.fields.PasItemAt[I]);
+  WritePara(Hn() + 'Properties' + LineEnding);
 
   for I := 0 to Item.Properties.Count - 1 do
     WriteProperty(Item.Properties.PasItemAt[I] as TPasProperty);
+  WriteDirectLine(LineEnding);
+
+  //???
 
   for I := 0 to Item.Types.Count - 1 do
     WriteType(Item.Types.PasItemAt[I]);
