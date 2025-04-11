@@ -61,6 +61,7 @@ type
     function FormatList(ListData: TListData): String; override;
     function FormatBold(const Text: String): String; override;
     function FormatItalic(const Text: String): String; override;
+    function FormatSubsc(const Text: String): String;
     function FormatNote(const Text: string): String; override;
     function FormatPascalCode(const Line: String): String; override;
 
@@ -85,7 +86,14 @@ type
     procedure Indent;
     procedure UnIndent;
 
-    function Hn(AIn: Integer = 0): String;
+    function Hn(AIn: Integer = 0; AAnchor: String = ''): String;
+    function AppendEmptyLine(AText: String = ''): String;
+    function Anchor(AText: String): String;
+    function LinkToAnchor(AText, AAnchor: String): String;
+    procedure WriteHeading(AText: String; AAnchor: String = '');
+    procedure WithEmptyLine(AText: String = '');
+    procedure WriteTableHeader(AHeaders: TStringArray);
+    procedure WriteTableRow(ACells: TStringArray);
 
   public
     procedure WriteDocumentation; override;
@@ -103,6 +111,11 @@ type
     mdvBoldRight,
     mdvItalicLeft,
     mdvItalicRight,
+    mdvSubscriptLeft,
+    mdvSubscriptRight,
+    mdvUnorderedList,
+    mdvOrderedList,
+    mdvDefinitionList,
     mdvInlCodeLeft,
     mdvInlCodeRight,
     mdvLongCodeBegin,
@@ -110,18 +123,23 @@ type
   );
 
 const
+  LE = LineEnding;
   MdElement: array[TMarkdownElement, TMarkdownVariant] of String = (
   // orig, redmine
     ('**', '**'), // mdvBoldLeft
     ('**', '**'), // mdvBoldRight
     ( '*', '__'), // mdvItalicLeft
     ( '*', '__'), // mdvItalicRight
+    ( '~', '~'),  // mdvSubscriptLeft,
+    ( '~', '~'),  // mdvSubscriptRight,
+    ( '-', '*'),  // mdvUnorderedList,
+    ( '1.', '#'),  // mdvOrderedList,
+    ( ':'+LE, ' := '),  // mdvDefinitionList,
     ( '`',  '@'), // mdvInlCodeLeft
     ( '`',  '@'), // mdvInlCodeRight
     ( '```',  '<pre><code class="pascal">'), // mdvLongCodeBegin
     ( '```',  '</code></pre>') // mdvLongCodeEnd
   );
-  LE = LineEnding;
 
 function AppSep(S1, S2, ASep: String): String;
 begin
@@ -147,6 +165,12 @@ function TMarkdownDocGenerator.FormatItalic(const Text: String): String;
 begin
   Result := MdElement[mdvItalicLeft, FVariant] + Text +
     MdElement[mdvItalicRight, FVariant];
+end;
+
+function TMarkdownDocGenerator.FormatSubsc(const Text: String): String;
+begin
+  Result := MdElement[mdvSubscriptLeft, FVariant] + Text +
+    MdElement[mdvSubscriptRight, FVariant];
 end;
 
 function TMarkdownDocGenerator.FormatNote(const Text: string): String;
@@ -242,147 +266,149 @@ begin
   if not CreateStream(U.OutputFileName + GetFileExtension) then
     Exit;
 
+  //FVariant := mdvRedmine;
+
   DoMessage(2, pmtInformation, 'Writing Docs for unit "%s"', [U.Name]);
   FIndent := HL;
-  WriteDirectLine(Hn() + 'Unit ' + U.Name + LE);
+
+  WriteHeading('Unit ' + U.Name);
+
+  if FVariant = mdvRedmine then
+  begin
+    WritePara('{{>toc}}');
+    WithEmptyLine();
+    WithEmptyLine();
+  end;
 
   if U.HasDescription then
     WritePara(ItemDescription(U));
 
+  Indent;
+
   // Used units
   if WriteUsesClause and not IsEmpty(U.UsesUnits) then
   begin
-    WriteDirectLine(Hn(+1) + 'Uses');
+    WriteHeading('Uses');
     S := '';
     for I := 0 to Pred(U.UsesUnits.Count) do
-      WriteDirectLine('- ' + U.UsesUnits[I]);
+      WriteDirectLine(MdElement[mdvUnorderedList, FVariant] + ' ' + U.UsesUnits[I]);
+    WithEmptyLine();
   end;
 
-  WriteDirectLine(LE);
-
-  Indent;
-
-  WriteDirectLine(Hn() + 'Overview');
-  WriteDirectLine(LE);
+  WriteHeading('Overview');
 
   Indent;
 
   if U.CIOs.Count > 0 then
   begin
-    WriteDirectLine(Hn() + 'Classes, Interfaces, Objects and Records');
-    WriteDirectLine('| Name | Description |' + LE + '|---|---|');
+    WriteHeading('Classes, Interfaces, Objects and Records');
+    WriteTableHeader(['Name', 'Description']);
     for I := 0 to Pred(U.CIOs.Count) do
       with U.CIOs.PasItemAt[I] as TPasCIO do
-        WritePara(
-        '|' + CioTypeToString(MyType) + ' ' + MakeItemLink(U.CIOs.PasItemAt[I], Name, lcNormal) +
-        '|' + AbstractDescription +
-        '|');
-    WriteDirectLine(LE);
+        WriteTableRow([
+          CioTypeToString(MyType) + ' ' + MakeItemLink(U.CIOs.PasItemAt[I], Name, lcNormal),
+          AbstractDescription
+        ]);
+      WithEmptyLine();
   end;
 
   if U.FuncsProcs.Count > 0 then
   begin
-    WriteDirectLine(Hn() + 'Functions and Procedures');
-    WriteDirectLine('| Name | Description |' + LE + '|---|---|');
+    WriteHeading('Functions and Procedures');
+    WriteTableHeader(['Name', 'Description']);
     for I := 0 to Pred(U.FuncsProcs.Count) do
       with U.FuncsProcs.PasItemAt[I] as TPasRoutine do
-        WritePara(
-          '|' + ReplaceStr(FullDeclaration, Name, MakeItemLink(U.FuncsProcs.PasItemAt[I], Name, lcNormal) ) +
-          '|' + AbstractDescription +
-          '|');
-    WriteDirectLine(LE);
+        WriteTableRow([
+          ReplaceStr(FullDeclaration, Name, MakeItemLink(U.FuncsProcs.PasItemAt[I], Name, lcNormal)),
+          AbstractDescription
+        ]);
+    WithEmptyLine();
   end;
 
   if U.Types.Count > 0 then
   begin
-    WriteDirectLine(Hn() + 'Types');
-    WriteDirectLine('| Name | Description |' + LE + '|---|---|');
+    WriteHeading('Types');
+    WriteTableHeader(['Name', 'Description']);
     for I := 0 to Pred(U.Types.Count) do
       with U.Types.PasItemAt[I] as TPasType do
-        WritePara(
-          '|' + //ReplaceStr(FullDeclaration, Name, MakeItemLink(U.Types.PasItemAt[I], Name, lcNormal) ) +
-                CodeWithLinks(U, FullDeclaration) +
-          '|' + AbstractDescription +
-          '|');
-    WriteDirectLine(LE);
+        WriteTableRow([
+          //ReplaceStr(FullDeclaration, Name, MakeItemLink(U.Types.PasItemAt[I], Name, lcNormal) ) +
+          CodeWithLinks(U, FullDeclaration),
+          AbstractDescription
+        ]);
+    WithEmptyLine();
   end;
 
   if U.Constants.Count > 0 then
   begin
-    WriteDirectLine(Hn() + 'Constants');
-    WriteDirectLine('| Name | Description |' + LE + '|---|---|');
+    WriteHeading('Constants');
+    WriteTableHeader(['Name', 'Description']);
     for I := 0 to Pred(U.Constants.Count) do
       with U.Constants.PasItemAt[I] as TPasConstant do
-        WritePara(
-          '|' + ReplaceStr(FullDeclaration, Name, MakeItemLink(U.Constants.PasItemAt[I], Name, lcNormal) ) +
-          '|' + AbstractDescription +
-          '|');
-    WriteDirectLine(LE);
+        WriteTableRow([
+          ReplaceStr(FullDeclaration, Name, MakeItemLink(U.Constants.PasItemAt[I], Name, lcNormal)),
+          AbstractDescription
+        ]);
+    WithEmptyLine();
   end;
 
   if U.Variables.Count > 0 then
   begin
-    WriteDirectLine(Hn() + 'Variables');
-    WriteDirectLine('| Name | Description |' + LE + '|---|---|');
+    WriteHeading('Variables');
+    WriteTableHeader(['Name', 'Description']);
     for I := 0 to Pred(U.Variables.Count) do
       with U.Variables.PasItemAt[I] do
-        WritePara(
-          '|' + ReplaceStr(FullDeclaration, Name, MakeItemLink(U.Variables.PasItemAt[I], Name, lcNormal) ) +
-          '|' + AbstractDescription +
-          '|');
-    WriteDirectLine(LE);
+        WriteTableRow([
+          ReplaceStr(FullDeclaration, Name, MakeItemLink(U.Variables.PasItemAt[I], Name, lcNormal)),
+          AbstractDescription
+        ]);
+    WithEmptyLine();
   end;
 
   UnIndent;
 
-  WriteDirectLine(Hn() + 'Description');
-  WriteDirectLine(LE);
+  WriteHeading('Description');
 
   Indent;
 
   if U.CIOs.Count > 0 then
   begin
-    WriteDirectLine(Hn() + 'Classes, Interfaces, Objects and Records');
-    WriteDirectLine(LE);
+    WriteHeading('Classes, Interfaces, Objects and Records');
     for I := 0 to Pred(U.CIOs.Count) do
       WriteStructure(U.CIOs.PasItemAt[I] as TPasCIO);
-    WriteDirectLine(LE);
+    WithEmptyLine();
   end;
 
   if U.FuncsProcs.Count > 0 then
   begin
-    WriteDirectLine(Hn() + 'Functions and Procedures');
-    WriteDirectLine(LE);
+    WriteHeading('Functions and Procedures');
     for I := 0 to Pred(U.FuncsProcs.Count) do
       WriteRoutine(U.FuncsProcs.PasItemAt[I] as TPasRoutine);
-    WriteDirectLine(LE);
+    WithEmptyLine();
   end;
 
   if U.Types.Count > 0 then
   begin
-    WriteDirectLine(Hn() + 'Types');
-    WriteDirectLine(LE);
+    WriteHeading('Types');
     for I := 0 to Pred(U.Types.Count) do
       WriteType(U.Types.PasItemAt[I] as TPasType);
-    WriteDirectLine(LE);
+    WithEmptyLine();
   end;
 
   if U.Constants.Count > 0 then
   begin
-    WriteDirectLine(Hn() + 'Constants');
-    WriteDirectLine(LE);
+    WriteHeading('Constants');
     for I := 0 to Pred(U.Constants.Count) do
       WriteConstant(U.Constants.PasItemAt[I] as TPasConstant);
-    WriteDirectLine(LE);
+    WithEmptyLine();
   end;
 
   if U.Variables.Count > 0 then
   begin
-    WriteDirectLine(Hn() + 'Variables');
-    WriteDirectLine(LE);
+    WriteHeading('Variables');
     for I := 0 to Pred(U.Variables.Count) do
       WriteVariable(U.Variables.PasItemAt[I]);
-    WriteDirectLine(LE);
+    WithEmptyLine();
   end;
 
   UnIndent;
@@ -475,10 +501,9 @@ procedure TMarkdownDocGenerator.WriteRoutine(const Item: TPasRoutine);
 var
   I: Integer;
 begin
-  WritePara(
-    Hn() + RoutineTypeToString(Item.What) + ' ' + ConvertString(Item.Name) +
-    ' {#' + Item.QualifiedName + '}' +
-    LE);
+  WriteHeading(
+    RoutineTypeToString(Item.What) + ' ' + ConvertString(Item.Name),
+    Item.QualifiedName);
 
   WriteDirectLine(
       //'| | |' + LE +
@@ -490,7 +515,7 @@ begin
 
   if Item.Params.Count > 0 then
   begin
-    WriteDirectLine(LE);
+    WithEmptyLine();
     WriteDirectLine('| name | desc |' + LE + '|---|---|');
     for I := 0 to Pred(Item.Params.Count) do
       WriteDirectLine(
@@ -502,7 +527,7 @@ begin
     WriteDirectLine(
         '| *(result)* | ' + Item.Returns + ' |');
 
-  WriteDirectLine(LE);
+  WithEmptyLine();
 
   if Item.HasDescription then
     WritePara(ItemDescription(Item));
@@ -510,7 +535,7 @@ end;
 
 procedure TMarkdownDocGenerator.WriteConstant(const Item: TPasItem);
 begin
-  WritePara(Hn() + 'Constant ' + ConvertString(Item.Name) + ' {#' + Item.QualifiedName + '}' + LE);
+  WriteHeading('Constant ' + ConvertString(Item.Name), Item.QualifiedName);
   WriteDirectLine(
     //'| - | - |' + LE +
     '| name | ' + ConvertString(Item.Name) + ' |' + LE +
@@ -518,7 +543,7 @@ begin
     '| declaration | ' + ConvertString(CodeString(Item.FullDeclaration)) + ' |' + LE +
     '| visibility | ' + VisToStr(Item.visibility) + ' |');
 
-  WriteDirectLine(LE);
+  WithEmptyLine();
 
   if Item.HasDescription then
     WritePara(ItemDescription(Item));
@@ -526,14 +551,14 @@ end;
 
 procedure TMarkdownDocGenerator.WriteVariable(const Item: TPasItem);
 begin
-  WritePara(Hn() + 'Variable ' + ConvertString(Item.Name) + ' {#' + Item.QualifiedName + '}' + LE);
+  WriteHeading('Variable ' + ConvertString(Item.Name), Item.QualifiedName);
   WriteDirectLine(
     '| | |' + LE + '|---|---|' + LE +
     '| var name | ' + ConvertString(Item.Name) + ' |' + LE +
     '| declaration | ' + ConvertString(Item.FullDeclaration) + ' |' + LE +
     '| visibility | ' + VisToStr(Item.visibility) + ' |');
 
-  WriteDirectLine(LE);
+  WithEmptyLine();
 
   if Item.HasDescription then
     WritePara(ItemDescription(Item));
@@ -550,14 +575,14 @@ procedure TMarkdownDocGenerator.WriteType(const Item: TPasItem);
   end;
 
 begin
-  WritePara(Hn() + 'Type ' + ConvertString(Item.Name) + ' {#' + Item.QualifiedName + '}' + LE);
+  WriteHeading('Type ' + ConvertString(Item.Name), Item.QualifiedName);
   WriteDirectLine(
     '| | |' + LE + '|---|---|' + LE +
     '| type name | ' + ConvertString(item.Name) + ' |' + LE +
     '| declaration | ' + ConvertString(item.FullDeclaration)  + ' |' + LE +
     '| visibility | ' + VisToStr(item.visibility)  + ' |');
 
-  WriteDirectLine(LE);
+  WithEmptyLine();
 
   if Item.HasDescription then
     WritePara(ItemDescription(Item));
@@ -568,7 +593,7 @@ begin
     WriteEnumMembers(TPasEnum(Item));
     UnIndent;
   end;
-  WriteDirectLine(LE);
+  WithEmptyLine();
 
 end;
 
@@ -576,7 +601,9 @@ procedure TMarkdownDocGenerator.WriteStructure(const Item: TPasCIO);
 var
   I: Integer;
 begin
-  WritePara(Hn() + CioTypeToString(Item.MyType) + ' ' + ConvertString(Item.Name) + ' {#' + Item.QualifiedName + '}' + LE);
+  WriteHeading(
+    CioTypeToString(Item.MyType) + ' ' + ConvertString(Item.Name),
+    Item.QualifiedName);
 
   WritePara(
   ' [' + 'Description' + '](#' + Item.QualifiedName + '-desc' + ')' +
@@ -595,92 +622,95 @@ begin
   Indent;
 
   // No Item.FullDeclaration? How it is handled in HTML?
-  WritePara(Hn() + 'Declaration' + LE);
+  WriteHeading('Declaration');
 
   FormatPascalCode(Item.FullDeclaration);
-  WriteDirectLine(LE);
+  WithEmptyLine();
 
-  WritePara(Hn() + 'Description ' + ' {#' + Item.QualifiedName + '-desc}' + LE);
+  WriteHeading('Description', Item.QualifiedName + '-desc');
 
   if Item.HasDescription then
     WritePara(ItemDescription(Item));
-  WriteDirectLine(LE);
+  WithEmptyLine();
 
-  WritePara(Hn() + 'Hierarchy ' + ' {#' + Item.QualifiedName + '-hier}' + LE);
+  WriteHeading('Hierarchy', Item.QualifiedName + '-hier');
 
   for I := 0 to Pred(Item.Ancestors.Count) do
     //WriteDirectLine(
     //  '| | |' + LE + '|---|---|' + LE +
     //  '| ancestor name | ' + ConvertString(Item.Ancestors[I].Name) + ' |' + LE +
     //  '| declaration | ' + ConvertString(Item.Ancestors[I].Value) + ' |');
-    WriteDirectLine('- ' + Item.Ancestors[I].Name);
-  WriteDirectLine(LE);
+    WriteDirectLine(MdElement[mdvUnorderedList, FVariant] + ' ' + Item.Ancestors[I].Name);
+  WithEmptyLine();
 
-  WritePara(Hn() + 'Overview' + LE);
+  WriteHeading('Overview');
+
+  Indent;
 
   if Item.Fields.Count > 0 then
   begin
-    WritePara(Hn(+1) + 'Fields ' + ' {#' + Item.QualifiedName + '-fields}' + LE);
+    WriteHeading('Fields', Item.QualifiedName + '-fields');
     WriteDirectLine('|| Name | Description |' + LE + '|---|:---|:---|');
     for I := 0 to Pred(Item.Fields.Count) do
       with Item.Fields.PasItemAt[I] do
         WritePara(
-          '|' + '~(' + VisToStr(Visibility) + ')~' +
+          '|' + FormatSubsc(VisToStr(Visibility)) +
           '|' + CodeWithLinks(Item, FullDeclaration) +
           '|' + AbstractDescription +
           '|');
-    WriteDirectLine(LE);
+    WithEmptyLine();
   end;
 
   if Item.Methods.Count > 0 then
   begin
-    WritePara(Hn(+1) + 'Methods ' + ' {#' + Item.QualifiedName + '-mths}' + LE);
+    WriteHeading('Methods', Item.QualifiedName + '-mths');
     WriteDirectLine('|| Name | Description |' + LE + '|---|:---|:---|');
     for I := 0 to Pred(Item.Methods.Count) do
       with Item.Methods.PasItemAt[I] as TPasRoutine do
         WritePara(
-          '|' + '~(' + VisToStr(Visibility) + ')~' +
+          '|' + FormatSubsc(VisToStr(Visibility)) +
           '|' + CodeWithLinks(Item, FullDeclaration) +
           '|' + AbstractDescription +
           '|');
-    WriteDirectLine(LE);
+    WithEmptyLine();
   end;
 
   if Item.Properties.Count > 0 then
   begin
-    WritePara(Hn(+1) + 'Properties ' + ' {#' + Item.QualifiedName + '-props}' + LE);
+    WriteHeading('Properties', Item.QualifiedName + '-props');
     WriteDirectLine('|| Name | Description |' + LE + '|---|:---|:---|');
     for I := 0 to Pred(Item.Properties.Count) do
       with Item.Properties.PasItemAt[I] as TPasProperty do
         WritePara(
-          '|' + '~(' + VisToStr(Visibility) + ')~' +
+          '|' + FormatSubsc(VisToStr(Visibility)) +
           '|' + CodeWithLinks(Item, FullDeclaration) +
           '|' + AbstractDescription +
           '|');
-    WriteDirectLine(LE);
+    WithEmptyLine();
   end;
 
+  UnIndent;
 
-  WritePara(Hn() + 'Fields' + LE);
+  WriteHeading('Fields');
 
   for I := 0 to Pred(Item.Fields.Count) do
     WriteVariable(Item.Fields.PasItemAt[I]);
-  WriteDirectLine(LE);
+  WithEmptyLine();
 
-  WritePara(Hn() + 'Methods' + LE);
+  WriteHeading('Methods');
 
   //for I := 0 to Item.Methods.Count - 1 do
   //  with Item.Methods.PasItemAt[I] as TPasRoutine do
   //    WriteDirectLine('- [' + Name + '](#' + QualifiedName + ')');
   for I := 0 to Item.Methods.Count - 1 do
     WriteRoutine(Item.Methods.PasItemAt[I] as TPasRoutine);
-  WriteDirectLine(LE);
+  WithEmptyLine();
 
-  WritePara(Hn() + 'Properties' + LE);
+  WriteHeading('Properties');
 
   for I := 0 to Item.Properties.Count - 1 do
     WriteProperty(Item.Properties.PasItemAt[I] as TPasProperty);
-  WriteDirectLine(LE);
+  WithEmptyLine();
 
   //???
 
@@ -695,7 +725,7 @@ end;
 
 procedure TMarkdownDocGenerator.WriteProperty(const Item: TPasProperty);
 begin
-  WritePara(Hn() + 'Property ' + ConvertString(Item.Name) + ' {#' + Item.QualifiedName + '}' + LE);
+  WriteHeading('Property ' + ConvertString(Item.Name), Item.QualifiedName);
   WriteDirectLine(
     '| | |' + LE + '|---|---|' + LE +
     '| property name | ' + ConvertString(Item.name) + ' |' + LE +
@@ -709,12 +739,12 @@ begin
     '| stored | ' + ConvertString(Item.Stored) + ' |' + LE +
     '| visibility | ' + VisToStr(Item.Visibility) + ' |');
 
-  WriteDirectLine(LE);
+  WithEmptyLine();
 
   if Item.HasDescription then
     WritePara(ItemDescription(Item));
 
-  WriteDirectLine(LE);
+  WithEmptyLine();
 end;
 
 procedure TMarkdownDocGenerator.WritePara(const AText: String);
@@ -732,9 +762,99 @@ begin
   Dec(FIndent);
 end;
 
-function TMarkdownDocGenerator.Hn(AIn: Integer): String;
+function TMarkdownDocGenerator.Hn(AIn: Integer; AAnchor: String): String;
 begin
-  Result := StringOfChar('#', FIndent + AIn) + ' ';
+  case FVariant of
+    mdvOrig:
+      begin
+        Result := StringOfChar('#', FIndent + AIn) + ' ';
+        if not AAnchor.IsEmpty then
+          Result := Result + Anchor(AAnchor);
+      end;
+    mdvRedmine:
+      begin
+        if AAnchor.IsEmpty
+          then Result := Format('h%d. ', [FIndent + AIn])
+          else Result := Format('h%d%s. ', [FIndent + AIn, Anchor(AAnchor)]);
+      end;
+  otherwise
+    Result := '';
+  end;
+end;
+
+procedure TMarkdownDocGenerator.WriteHeading(AText: String; AAnchor: String);
+begin                    // the anchor must be after the text in normal mode!
+  WriteDirect(Hn(0, AAnchor) + AppendEmptyLine(AText));
+end;
+
+function TMarkdownDocGenerator.AppendEmptyLine(AText: String): String;
+begin
+  if EndsStr(LE, AText) or AText.IsEmpty
+    then Result := AText + LE
+    else Result := AText + LE + LE;
+end;
+
+function TMarkdownDocGenerator.Anchor(AText: String): String;
+begin
+  case FVariant of
+    mdvOrig: Result := '{#' + AText + '}';
+    mdvRedmine: Result := '(#' + AText + ')';
+  else
+    Result := '';
+  end;
+end;
+
+function TMarkdownDocGenerator.LinkToAnchor(AText, AAnchor: String): String;
+begin
+  case FVariant of
+    mdvOrig: Result := '[' + AText + '](#' + AAnchor + ')';
+    //mdvRedmine: '[[' + AText + '|#' + AAnchor + ']]'; // DOESN'T WORK!
+  else
+    Result := '';
+  end;
+end;
+
+procedure TMarkdownDocGenerator.WithEmptyLine(AText: String);
+begin
+  WriteDirect(AppendEmptyLine(AText));
+end;
+
+procedure TMarkdownDocGenerator.WriteTableHeader(AHeaders: TStringArray);
+var
+  H, L, S: String;
+begin
+  case FVariant of
+    mdvOrig:
+      begin
+        H := ''; L := '';
+        for S in AHeaders do
+        begin
+          H := H + '|' + S;
+          L := L + '|---';
+        end;
+        WriteDirectLine(H + '|');
+        WriteDirectLine(L + '|');
+      end;
+
+    mdvRedmine:
+      begin
+        H := '';
+        for S in AHeaders do
+          H := H + '|_. ' + S;
+        WriteDirectLine(H + '|');
+      end;
+
+  end;
+end;
+
+procedure TMarkdownDocGenerator.WriteTableRow(ACells: TStringArray);
+var
+  R, S: String;
+begin
+  R := '';
+  for S in ACells do
+    R := R + '|' + S;
+  WriteDirectLine(R + '|');
 end;
 
 procedure TMarkdownDocGenerator.WriteDocumentation;
