@@ -49,7 +49,7 @@
         <IsPartOfProject Value="True"/>
         <TopLine Value="30"/>
         <CursorPos X="10" Y="61"/>
-        <UsageCount Value="60"/>
+        <UsageCount Value="62"/>
         <Loaded Value="True"/>
       </Unit0>
     </Units>
@@ -88,15 +88,6 @@
     </Other>
   </CompilerOptions>
   <Debugging>
-    <BreakPoints Count="1">
-      <Item1>
-        <Kind Value="bpkSource"/>
-        <WatchScope Value="wpsLocal"/>
-        <WatchKind Value="wpkWrite"/>
-        <Source Value="..\component\PasDoc_GenMarkdown.pas"/>
-        <Line Value="563"/>
-      </Item1>
-    </BreakPoints>
     <Exceptions Count="2">
       <Item1>
         <Name Value="ECodetoolError"/>
