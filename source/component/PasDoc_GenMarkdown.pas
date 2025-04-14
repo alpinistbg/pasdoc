@@ -215,6 +215,9 @@ var
   FoundItem: TBaseItem;
 begin
   Result := ACode;
+  // Redmine links not working so far
+  if FVariant = mdvRedmine then
+    Exit;
   repeat
     FoundPos := P;
     S := ExtractSubstr(Result, P, IdentDelims);
@@ -275,6 +278,7 @@ begin
 
   if FVariant = mdvRedmine then
   begin
+    // Generate a TOC for Redmine
     WritePara('{{>toc}}');
     WithEmptyLine();
     WithEmptyLine();
@@ -295,123 +299,129 @@ begin
     WithEmptyLine();
   end;
 
-  WriteHeading('Overview');
-
-  Indent;
-
-  if U.CIOs.Count > 0 then
+  if (U.CIOs.Count > 0) or (U.FuncsProcs.Count > 0) or (U.Types.Count > 0) or
+    (U.Constants.Count > 0) or (U.Variables.Count > 0)
+  then
   begin
-    WriteHeading('Classes, Interfaces, Objects and Records');
-    WriteTableHeader(['Name', 'Description']);
-    for I := 0 to Pred(U.CIOs.Count) do
-      with U.CIOs.PasItemAt[I] as TPasCIO do
-        WriteTableRow([
-          CioTypeToString(MyType) + ' ' + MakeItemLink(U.CIOs.PasItemAt[I], Name, lcNormal),
-          AbstractDescription
-        ]);
+    WriteHeading('Overview');
+
+    Indent;
+
+    if U.CIOs.Count > 0 then
+    begin
+      WriteHeading('Classes, Interfaces, Objects and Records');
+      WriteTableHeader(['Name', 'Description']);
+      for I := 0 to Pred(U.CIOs.Count) do
+        with U.CIOs.PasItemAt[I] as TPasCIO do
+          WriteTableRow([
+            CioTypeToString(MyType) + ' ' + MakeItemLink(U.CIOs.PasItemAt[I], Name, lcNormal),
+            AbstractDescription
+          ]);
+        WithEmptyLine();
+    end;
+
+    if U.FuncsProcs.Count > 0 then
+    begin
+      WriteHeading('Functions and Procedures');
+      WriteTableHeader(['Name', 'Description']);
+      for I := 0 to Pred(U.FuncsProcs.Count) do
+        with U.FuncsProcs.PasItemAt[I] as TPasRoutine do
+          WriteTableRow([
+            ReplaceStr(FullDeclaration, Name, MakeItemLink(U.FuncsProcs.PasItemAt[I], Name, lcNormal)),
+            AbstractDescription
+          ]);
       WithEmptyLine();
+    end;
+
+    if U.Types.Count > 0 then
+    begin
+      WriteHeading('Types');
+      WriteTableHeader(['Name', 'Description']);
+      for I := 0 to Pred(U.Types.Count) do
+        with U.Types.PasItemAt[I] as TPasType do
+          WriteTableRow([
+            //ReplaceStr(FullDeclaration, Name, MakeItemLink(U.Types.PasItemAt[I], Name, lcNormal) ) +
+            CodeWithLinks(U, FullDeclaration),
+            AbstractDescription
+          ]);
+      WithEmptyLine();
+    end;
+
+    if U.Constants.Count > 0 then
+    begin
+      WriteHeading('Constants');
+      WriteTableHeader(['Name', 'Description']);
+      for I := 0 to Pred(U.Constants.Count) do
+        with U.Constants.PasItemAt[I] as TPasConstant do
+          WriteTableRow([
+            ReplaceStr(FullDeclaration, Name, MakeItemLink(U.Constants.PasItemAt[I], Name, lcNormal)),
+            AbstractDescription
+          ]);
+      WithEmptyLine();
+    end;
+
+    if U.Variables.Count > 0 then
+    begin
+      WriteHeading('Variables');
+      WriteTableHeader(['Name', 'Description']);
+      for I := 0 to Pred(U.Variables.Count) do
+        with U.Variables.PasItemAt[I] do
+          WriteTableRow([
+            ReplaceStr(FullDeclaration, Name, MakeItemLink(U.Variables.PasItemAt[I], Name, lcNormal)),
+            AbstractDescription
+          ]);
+      WithEmptyLine();
+    end;
+
+    UnIndent;
+
+    WriteHeading('Description');
+
+    Indent;
+
+    if U.CIOs.Count > 0 then
+    begin
+      WriteHeading('Classes, Interfaces, Objects and Records');
+      for I := 0 to Pred(U.CIOs.Count) do
+        WriteStructure(U.CIOs.PasItemAt[I] as TPasCIO);
+      WithEmptyLine();
+    end;
+
+    if U.FuncsProcs.Count > 0 then
+    begin
+      WriteHeading('Functions and Procedures');
+      for I := 0 to Pred(U.FuncsProcs.Count) do
+        WriteRoutine(U.FuncsProcs.PasItemAt[I] as TPasRoutine);
+      WithEmptyLine();
+    end;
+
+    if U.Types.Count > 0 then
+    begin
+      WriteHeading('Types');
+      for I := 0 to Pred(U.Types.Count) do
+        WriteType(U.Types.PasItemAt[I] as TPasType);
+      WithEmptyLine();
+    end;
+
+    if U.Constants.Count > 0 then
+    begin
+      WriteHeading('Constants');
+      for I := 0 to Pred(U.Constants.Count) do
+        WriteConstant(U.Constants.PasItemAt[I] as TPasConstant);
+      WithEmptyLine();
+    end;
+
+    if U.Variables.Count > 0 then
+    begin
+      WriteHeading('Variables');
+      for I := 0 to Pred(U.Variables.Count) do
+        WriteVariable(U.Variables.PasItemAt[I]);
+      WithEmptyLine();
+    end;
+
+    UnIndent;
+
   end;
-
-  if U.FuncsProcs.Count > 0 then
-  begin
-    WriteHeading('Functions and Procedures');
-    WriteTableHeader(['Name', 'Description']);
-    for I := 0 to Pred(U.FuncsProcs.Count) do
-      with U.FuncsProcs.PasItemAt[I] as TPasRoutine do
-        WriteTableRow([
-          ReplaceStr(FullDeclaration, Name, MakeItemLink(U.FuncsProcs.PasItemAt[I], Name, lcNormal)),
-          AbstractDescription
-        ]);
-    WithEmptyLine();
-  end;
-
-  if U.Types.Count > 0 then
-  begin
-    WriteHeading('Types');
-    WriteTableHeader(['Name', 'Description']);
-    for I := 0 to Pred(U.Types.Count) do
-      with U.Types.PasItemAt[I] as TPasType do
-        WriteTableRow([
-          //ReplaceStr(FullDeclaration, Name, MakeItemLink(U.Types.PasItemAt[I], Name, lcNormal) ) +
-          CodeWithLinks(U, FullDeclaration),
-          AbstractDescription
-        ]);
-    WithEmptyLine();
-  end;
-
-  if U.Constants.Count > 0 then
-  begin
-    WriteHeading('Constants');
-    WriteTableHeader(['Name', 'Description']);
-    for I := 0 to Pred(U.Constants.Count) do
-      with U.Constants.PasItemAt[I] as TPasConstant do
-        WriteTableRow([
-          ReplaceStr(FullDeclaration, Name, MakeItemLink(U.Constants.PasItemAt[I], Name, lcNormal)),
-          AbstractDescription
-        ]);
-    WithEmptyLine();
-  end;
-
-  if U.Variables.Count > 0 then
-  begin
-    WriteHeading('Variables');
-    WriteTableHeader(['Name', 'Description']);
-    for I := 0 to Pred(U.Variables.Count) do
-      with U.Variables.PasItemAt[I] do
-        WriteTableRow([
-          ReplaceStr(FullDeclaration, Name, MakeItemLink(U.Variables.PasItemAt[I], Name, lcNormal)),
-          AbstractDescription
-        ]);
-    WithEmptyLine();
-  end;
-
-  UnIndent;
-
-  WriteHeading('Description');
-
-  Indent;
-
-  if U.CIOs.Count > 0 then
-  begin
-    WriteHeading('Classes, Interfaces, Objects and Records');
-    for I := 0 to Pred(U.CIOs.Count) do
-      WriteStructure(U.CIOs.PasItemAt[I] as TPasCIO);
-    WithEmptyLine();
-  end;
-
-  if U.FuncsProcs.Count > 0 then
-  begin
-    WriteHeading('Functions and Procedures');
-    for I := 0 to Pred(U.FuncsProcs.Count) do
-      WriteRoutine(U.FuncsProcs.PasItemAt[I] as TPasRoutine);
-    WithEmptyLine();
-  end;
-
-  if U.Types.Count > 0 then
-  begin
-    WriteHeading('Types');
-    for I := 0 to Pred(U.Types.Count) do
-      WriteType(U.Types.PasItemAt[I] as TPasType);
-    WithEmptyLine();
-  end;
-
-  if U.Constants.Count > 0 then
-  begin
-    WriteHeading('Constants');
-    for I := 0 to Pred(U.Constants.Count) do
-      WriteConstant(U.Constants.PasItemAt[I] as TPasConstant);
-    WithEmptyLine();
-  end;
-
-  if U.Variables.Count > 0 then
-  begin
-    WriteHeading('Variables');
-    for I := 0 to Pred(U.Variables.Count) do
-      WriteVariable(U.Variables.PasItemAt[I]);
-    WithEmptyLine();
-  end;
-
-  UnIndent;
 
   UnIndent;
 end;
@@ -605,12 +615,14 @@ begin
     CioTypeToString(Item.MyType) + ' ' + ConvertString(Item.Name),
     Item.QualifiedName);
 
-  WritePara(
-  ' [' + 'Description' + '](#' + Item.QualifiedName + '-desc' + ')' +
-  ' [' + 'Hierarchy' + '](#' + Item.QualifiedName + '-hier' + ')' +
-  ' [' + 'Fields' + '](#' + Item.QualifiedName + '-fields' + ')' +
-  ' [' + 'Methods' + '](#' + Item.QualifiedName + '-mths' + ')' +
-  ' [' + 'Properties' + '](#' + Item.QualifiedName + '-props' + ')');
+  WithEmptyLine(
+
+    LinkToAnchor('Description', Item.QualifiedName + '-desc') + ' ' +
+    LinkToAnchor('Hierarchy', Item.QualifiedName + '-hier') + ' ' +
+    LinkToAnchor('Fields', Item.QualifiedName + '-fields') + ' ' +
+    LinkToAnchor('Methods',  Item.QualifiedName + '-mths') + ' ' +
+    LinkToAnchor('Properties', Item.QualifiedName + '-props'));
+
 
     //WriteDirectLine(
     //'| | |' + LE + '|---|---|' + LE +
@@ -643,84 +655,90 @@ begin
     WriteDirectLine(MdElement[mdvUnorderedList, FVariant] + ' ' + Item.Ancestors[I].Name);
   WithEmptyLine();
 
-  WriteHeading('Overview');
-
-  Indent;
-
-  if Item.Fields.Count > 0 then
+  if (Item.Fields.Count > 0) or (Item.Methods.Count > 0) or
+    (Item.Properties.Count > 0)
+  then
   begin
-    WriteHeading('Fields', Item.QualifiedName + '-fields');
-    WriteDirectLine('|| Name | Description |' + LE + '|---|:---|:---|');
+    WriteHeading('Overview');
+
+    Indent;
+
+    if Item.Fields.Count > 0 then
+    begin
+      WriteHeading('Fields', Item.QualifiedName + '-fields');
+      WriteDirectLine('|| Name | Description |' + LE + '|---|:---|:---|');
+      for I := 0 to Pred(Item.Fields.Count) do
+        with Item.Fields.PasItemAt[I] do
+          WritePara(
+            '|' + FormatSubsc(VisToStr(Visibility)) +
+            '|' + CodeWithLinks(Item, FullDeclaration) +
+            '|' + AbstractDescription +
+            '|');
+      WithEmptyLine();
+    end;
+
+    if Item.Methods.Count > 0 then
+    begin
+      WriteHeading('Methods', Item.QualifiedName + '-mths');
+      WriteDirectLine('|| Name | Description |' + LE + '|---|:---|:---|');
+      for I := 0 to Pred(Item.Methods.Count) do
+        with Item.Methods.PasItemAt[I] as TPasRoutine do
+          WritePara(
+            '|' + FormatSubsc(VisToStr(Visibility)) +
+            '|' + CodeWithLinks(Item, FullDeclaration) +
+            '|' + AbstractDescription +
+            '|');
+      WithEmptyLine();
+    end;
+
+    if Item.Properties.Count > 0 then
+    begin
+      WriteHeading('Properties', Item.QualifiedName + '-props');
+      WriteDirectLine('|| Name | Description |' + LE + '|---|:---|:---|');
+      for I := 0 to Pred(Item.Properties.Count) do
+        with Item.Properties.PasItemAt[I] as TPasProperty do
+          WritePara(
+            '|' + FormatSubsc(VisToStr(Visibility)) +
+            '|' + CodeWithLinks(Item, FullDeclaration) +
+            '|' + AbstractDescription +
+            '|');
+      WithEmptyLine();
+    end;
+
+    UnIndent;
+
+    WriteHeading('Fields');
+
     for I := 0 to Pred(Item.Fields.Count) do
-      with Item.Fields.PasItemAt[I] do
-        WritePara(
-          '|' + FormatSubsc(VisToStr(Visibility)) +
-          '|' + CodeWithLinks(Item, FullDeclaration) +
-          '|' + AbstractDescription +
-          '|');
+      WriteVariable(Item.Fields.PasItemAt[I]);
     WithEmptyLine();
-  end;
 
-  if Item.Methods.Count > 0 then
-  begin
-    WriteHeading('Methods', Item.QualifiedName + '-mths');
-    WriteDirectLine('|| Name | Description |' + LE + '|---|:---|:---|');
-    for I := 0 to Pred(Item.Methods.Count) do
-      with Item.Methods.PasItemAt[I] as TPasRoutine do
-        WritePara(
-          '|' + FormatSubsc(VisToStr(Visibility)) +
-          '|' + CodeWithLinks(Item, FullDeclaration) +
-          '|' + AbstractDescription +
-          '|');
+    WriteHeading('Methods');
+
+    //for I := 0 to Item.Methods.Count - 1 do
+    //  with Item.Methods.PasItemAt[I] as TPasRoutine do
+    //    WriteDirectLine('- [' + Name + '](#' + QualifiedName + ')');
+    for I := 0 to Item.Methods.Count - 1 do
+      WriteRoutine(Item.Methods.PasItemAt[I] as TPasRoutine);
     WithEmptyLine();
-  end;
 
-  if Item.Properties.Count > 0 then
-  begin
-    WriteHeading('Properties', Item.QualifiedName + '-props');
-    WriteDirectLine('|| Name | Description |' + LE + '|---|:---|:---|');
-    for I := 0 to Pred(Item.Properties.Count) do
-      with Item.Properties.PasItemAt[I] as TPasProperty do
-        WritePara(
-          '|' + FormatSubsc(VisToStr(Visibility)) +
-          '|' + CodeWithLinks(Item, FullDeclaration) +
-          '|' + AbstractDescription +
-          '|');
+    WriteHeading('Properties');
+
+    for I := 0 to Item.Properties.Count - 1 do
+      WriteProperty(Item.Properties.PasItemAt[I] as TPasProperty);
     WithEmptyLine();
+
+    //???
+
+    for I := 0 to Item.Types.Count - 1 do
+      WriteType(Item.Types.PasItemAt[I]);
+
+    for I := 0 to Item.Cios.Count - 1 do
+      WriteStructure(Item.Cios.PasItemAt[I] as TPasCio);
+
+    UnIndent;
+
   end;
-
-  UnIndent;
-
-  WriteHeading('Fields');
-
-  for I := 0 to Pred(Item.Fields.Count) do
-    WriteVariable(Item.Fields.PasItemAt[I]);
-  WithEmptyLine();
-
-  WriteHeading('Methods');
-
-  //for I := 0 to Item.Methods.Count - 1 do
-  //  with Item.Methods.PasItemAt[I] as TPasRoutine do
-  //    WriteDirectLine('- [' + Name + '](#' + QualifiedName + ')');
-  for I := 0 to Item.Methods.Count - 1 do
-    WriteRoutine(Item.Methods.PasItemAt[I] as TPasRoutine);
-  WithEmptyLine();
-
-  WriteHeading('Properties');
-
-  for I := 0 to Item.Properties.Count - 1 do
-    WriteProperty(Item.Properties.PasItemAt[I] as TPasProperty);
-  WithEmptyLine();
-
-  //???
-
-  for I := 0 to Item.Types.Count - 1 do
-    WriteType(Item.Types.PasItemAt[I]);
-
-  for I := 0 to Item.Cios.Count - 1 do
-    WriteStructure(Item.Cios.PasItemAt[I] as TPasCio);
-
-  UnIndent;
 end;
 
 procedure TMarkdownDocGenerator.WriteProperty(const Item: TPasProperty);
@@ -769,13 +787,16 @@ begin
       begin
         Result := StringOfChar('#', FIndent + AIn) + ' ';
         if not AAnchor.IsEmpty then
-          Result := Result + Anchor(AAnchor);
+          // Writing an anschor discards everything to EOL
+          ;{Result := Result + Anchor(AAnchor);}
       end;
     mdvRedmine:
       begin
-        if AAnchor.IsEmpty
-          then Result := Format('h%d. ', [FIndent + AIn])
-          else Result := Format('h%d%s. ', [FIndent + AIn, Anchor(AAnchor)]);
+        Result := Format('h%d. ', [FIndent + AIn]);
+        // Redmine anchors not working as expected...
+        //if AAnchor.IsEmpty
+        //  then Result := Format('h%d. ', [FIndent + AIn])
+        //  else Result := Format('h%d%s. ', [FIndent + AIn, Anchor(AAnchor)]);
       end;
   otherwise
     Result := '';
@@ -783,8 +804,12 @@ begin
 end;
 
 procedure TMarkdownDocGenerator.WriteHeading(AText: String; AAnchor: String);
-begin                    // the anchor must be after the text in normal mode!
-  WriteDirect(Hn(0, AAnchor) + AppendEmptyLine(AText));
+begin
+  case FVariant of
+  // the anchor must be after the text in normal mode!
+    mdvOrig: WriteDirect(Hn() + AppendEmptyLine(AppSep(AText, Anchor(AAnchor), ' ')));
+    mdvRedmine: WriteDirect(Hn(0, AAnchor) + AppendEmptyLine(AText));
+  end;
 end;
 
 function TMarkdownDocGenerator.AppendEmptyLine(AText: String): String;
@@ -796,11 +821,12 @@ end;
 
 function TMarkdownDocGenerator.Anchor(AText: String): String;
 begin
+  Result := '';
+  if AText.IsEmpty then
+    Exit;
   case FVariant of
     mdvOrig: Result := '{#' + AText + '}';
     mdvRedmine: Result := '(#' + AText + ')';
-  else
-    Result := '';
   end;
 end;
 
