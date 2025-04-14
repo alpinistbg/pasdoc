@@ -59,6 +59,9 @@ type
   { @abstract(generates HTML documentation)
     Extends @link(TDocGenerator) and overwrites many of its methods to generate
     output in HTML (HyperText Markup Language) format. }
+
+  { TGenericHTMLDocGenerator }
+
   TGenericHTMLDocGenerator = class(TDocGenerator)
   private
     FUseTipueSearch: boolean;
@@ -347,6 +350,26 @@ type
     function MakeBodyEnd: string; override;
   end;
 
+  { TMHTMLDocGenerator }
+
+  TMHTMLDocGenerator = class(THTMLDocGenerator)
+  private
+    FFileList: TStringList;
+  protected
+    { Hooks }
+    function CreateStream(const AName: string): Boolean; override;
+    procedure CopyFile(const SourceFileName, DestinationFileName: string);
+      override;
+    procedure StringToFile(const FileName, S: string); override;
+    procedure DataToFile(const FileName: string; const Data: array of Byte);
+      override;
+  public
+    constructor Create(AOwner: TComponent); override;
+    destructor Destroy; override;
+
+    procedure WriteDocumentation; override;
+  end;
+
 const
   DefaultPasdocCss = {$I pasdoc.css.inc};
 
@@ -355,8 +378,7 @@ function SignatureToHtmlId(const Signature: string): string;
 implementation
 
 uses
-  SysUtils,
-  StrUtils, { if you are using Delphi 5 or fpc 1.1.x you must add ..\component\strutils to your search path }
+  SysUtils, StrUtils, base64, { if you are using Delphi 5 or fpc 1.1.x you must add ..\component\strutils to your search path }
   PasDoc_Base,
   PasDoc_ObjectVector,
   PasDoc_HierarchyTree,
@@ -380,6 +402,113 @@ const
   );
 begin
   Result := StringReplaceChars(Signature, ReplacementArray);
+end;
+
+{ TMHTMLDocGenerator }
+
+function TMHTMLDocGenerator.CreateStream(const AName: string): Boolean;
+begin
+  Result := inherited CreateStream(AName);
+  if Result then
+    FFileList.Add(DestinationDirectory + AName);
+end;
+
+procedure TMHTMLDocGenerator.CopyFile(const SourceFileName,
+  DestinationFileName: string);
+begin
+  inherited CopyFile(SourceFileName, DestinationFileName);
+  FFileList.Add(DestinationFileName);
+end;
+
+procedure TMHTMLDocGenerator.StringToFile(const FileName, S: string);
+begin
+  inherited StringToFile(FileName, S);
+  FFileList.Add(FileName);
+end;
+
+procedure TMHTMLDocGenerator.DataToFile(const FileName: string;
+  const Data: array of Byte);
+begin
+  inherited DataToFile(FileName, Data);
+  FFileList.Add(FileName);
+end;
+
+constructor TMHTMLDocGenerator.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  FFileList := TStringList.Create;
+end;
+
+destructor TMHTMLDocGenerator.Destroy;
+begin
+  FFileList.Free;
+  inherited Destroy;
+end;
+
+procedure TMHTMLDocGenerator.WriteDocumentation;
+var
+  Boundary: String = '------MultipartBoundary--GsIBda0vjy2AKIAIliwl7JMwezXDRjDAsLje9khd5l----';
+  S, FileExt, CType, FileLoc, FileContent: String;
+  Source, Dest: TFileStream;
+  Cid: Integer = 950120;
+
+  procedure DestWrite(AText: String);
+  begin
+    Dest.Write(AText[1], Length(AText));
+  end;
+
+begin
+  inherited WriteDocumentation;
+
+  Dest := TFileStream.Create(DestinationDirectory + 'index.eml', fmCreate);
+  try
+    DestWrite(
+      'From: <Saved by Blink>' + LineEnding +
+      'Subject: Smartphone - Wikipedia' + LineEnding +
+      'MIME-Version: 1.0'  + LineEnding +
+      'Content-Type: multipart/related; type="text/html";' + LineEnding +
+      '      boundary="' + Boundary + '"' + LineEnding +
+      '      start="<' + Cid.ToString + '.aaCC@XIson.com>";' + LineEnding
+    );
+
+    FFileList.Delete(FFileList.IndexOf(DestinationDirectory + 'index.html'));
+    FFileList.Insert(0, DestinationDirectory + 'index.html');
+    for S in FFileList{.Reverse} do
+    begin
+      WriteLn('>>>>>>>>>>>>>>>>>>>> File: ', S);
+      FileExt := ExtractFileExt(S);
+      CType := '';
+      case UpCase(FileExt) of
+        '.HTM', '.HTML': CType := 'text/html; charset="utf-8"';
+        '.CSS': CType := 'text/css; charset="utf-8"';
+        //'.GIF': CType := 'image/gif';
+        //'.PNG': CType := 'image/png';
+        //'.JPG', '.JPEG': CType := 'image/jpeg';
+      otherwise
+        Continue;
+        //CType := 'application/octet-stream';
+      end;
+      FileLoc := S;
+      if StartsStr(DestinationDirectory, S) then
+        FileLoc := Copy(S, Length(DestinationDirectory) + 1, MaxInt);
+
+      DestWrite(LineEnding + '--' + Boundary + LineEnding);
+      DestWrite('Content-Type: ' + CType + LineEnding);
+      //DestWrite('Content-Transfer-Encoding: ' + {'base64'} '' + LineEnding);
+      DestWrite('Content-Id: <' + Cid.ToString + '.aaCC@XIson.com>' + LineEnding);
+      Inc(Cid);
+      DestWrite('Content-Location: ' + FileLoc + LineEnding);
+      DestWrite(LineEnding);
+
+      FileContent := FileToString(S);
+      //FileContent := EncodeStringBase64(FileContent);
+      DestWrite(FileContent);
+      DestWrite(LineEnding + LineEnding);
+    end;
+    DestWrite('--' + Boundary + LineEnding);
+  finally
+    Dest.Free;
+  end;
 end;
 
 { TGenericHTMLDocGenerator --------------------------------------------------- }
@@ -2284,7 +2413,7 @@ begin
   CopyFile(DestinationDirectory + IndexSourceFileName, DestinationDirectory + 'index.html');
 end;
 
-function TGenericHTMLDocGenerator.ConvertString(const S: String): String;
+function TGenericHTMLDocGenerator.ConvertString(const s: string): string;
 const
   ReplacementArray: array[0..4] of TCharReplacement = (
     (cChar: '<'; sSpec: '&lt;'),
@@ -2297,7 +2426,7 @@ begin
   Result := StringReplaceChars(S, ReplacementArray);
 end;
 
-function TGenericHTMLDocGenerator.ConvertChar(c: char): String;
+function TGenericHTMLDocGenerator.ConvertChar(c: char): string;
 begin
   ConvertChar := ConvertString(c);
 end;
@@ -2425,7 +2554,7 @@ begin
 end;
 
 function TGenericHTMLDocGenerator.FormatSection(HL: integer;
-  const Anchor, Caption: string): string;
+  const Anchor: string; const Caption: string): string;
 begin
   { We use `HL + 1' because user is allowed to use levels
     >= 1, and heading level 1 is reserved for section title. }

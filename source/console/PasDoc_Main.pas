@@ -490,6 +490,9 @@ begin
   if OptionFormat.Value = 'html' then begin
     PasDoc.Generator := SetHtmlOptions(THTMLDocGenerator.Create(PasDoc));
   end else
+  if OptionFormat.Value = 'mhtml' then begin
+    PasDoc.Generator := SetHtmlOptions(TMHTMLDocGenerator.Create(PasDoc));
+  end else
   if OptionFormat.Value = 'simplexml' then
   begin
     PasDoc.Generator := SetSimpleXMLOptions(TSimpleXMLDocGenerator.Create(PasDoc));

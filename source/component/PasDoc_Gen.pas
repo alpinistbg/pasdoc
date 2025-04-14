@@ -234,6 +234,9 @@ type
     values and program parameters.
     Depending on the output format, one or more files may be created (HTML
     will create several, Tex only one). }
+
+  { TDocGenerator }
+
   TDocGenerator = class(TComponent)
   private
     { Things related to spell checking }
@@ -537,7 +540,19 @@ type
 
       Returns @true if creation was successful, @false otherwise.
       When it returns @false, the error message was already shown by DoMessage. }
-    function CreateStream(const AName: string): Boolean;
+    function CreateStream(const AName: string): Boolean; virtual;
+
+    { Copy file hook. Can be used in descendants to build file list
+      for post processing. }
+    procedure CopyFile(const SourceFileName, DestinationFileName: string); virtual;
+
+    { Data to file hook. Can be used in descendants to build file list
+      for post processing. }
+    procedure DataToFile(const FileName: string; const Data: array of Byte); virtual;
+
+    { String to file hook. Can be used in descendants to build file list
+      for post processing. }
+    procedure StringToFile(const FileName, S: string); virtual;
 
     { Searches for an email address in String S. Searches for first appearance
       of the @@ character}
@@ -1263,6 +1278,23 @@ begin
     on E: Exception do
       DoMessage(1, pmtError, 'Could not create file "%s": %s', [S, E.Message]);
   end;
+end;
+
+procedure TDocGenerator.CopyFile(const SourceFileName,
+  DestinationFileName: string);
+begin
+  PasDoc_Utils.CopyFile(SourceFileName, DestinationFileName);
+end;
+
+procedure TDocGenerator.DataToFile(const FileName: string;
+  const Data: array of Byte);
+begin
+  PasDoc_Utils.DataToFile(FileName, Data);
+end;
+
+procedure TDocGenerator.StringToFile(const FileName, S: string);
+begin
+  PasDoc_Utils.StringToFile(FileName, S);
 end;
 
 { ---------------------------------------------------------------------------- }
