@@ -33,9 +33,9 @@
       <Unit0>
         <Filename Value="pasdoc.dpr"/>
         <IsPartOfProject Value="True"/>
-        <TopLine Value="32"/>
-        <CursorPos X="17" Y="44"/>
-        <UsageCount Value="105"/>
+        <TopLine Value="34"/>
+        <CursorPos Y="64"/>
+        <UsageCount Value="90"/>
         <Loaded Value="True"/>
       </Unit0>
     </Units>
@@ -74,11 +74,16 @@
     </Other>
   </CompilerOptions>
   <Debugging>
-    <Watches Count="1">
+    <BreakPoints Count="1">
       <Item1>
-        <Expression Value="FVariant"/>
+        <Kind Value="bpkSource"/>
+        <WatchScope Value="wpsLocal"/>
+        <WatchKind Value="wpkWrite"/>
+        <Source Value="..\component\PasDoc_GenMarkdown.pas"/>
+        <InitialEnabled Value="False"/>
+        <Line Value="537"/>
       </Item1>
-    </Watches>
+    </BreakPoints>
     <Exceptions Count="2">
       <Item1>
         <Name Value="ECodetoolError"/>
