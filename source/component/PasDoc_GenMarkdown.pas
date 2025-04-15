@@ -40,12 +40,14 @@ uses
 
 type
 
-  TMarkdownVariant = (mdvOrig, mdvRedmine);
+  TMarkdownVariant = (mdvOrig, mdvRedmine, mdvGithub);
 
   { TMarkdownDocGenerator }
 
   TMarkdownDocGenerator = class(TDocGenerator)
   protected
+    function OneLineCodeString(const S: String): String;
+    function InlineCodeString(const S: String): String;
     function CodeString(const S: String): String; override;
     function CodeWithLinks(const AItem: TPasItem; const ACode: String): String;
     function ConvertString(const S: String): String; override;
@@ -72,6 +74,8 @@ type
     FPara: String;
     FIndent: Integer;
 
+    function GithubAnchor(const Anchor: String): String;
+
     function ItemDescription(Item: TPasItem): String;
 
     procedure WriteRoutine(const Item: TPasRoutine);
@@ -81,6 +85,11 @@ type
     procedure WriteStructure(const Item: TPasCIO);
     procedure WriteProperty(const Item: TPasProperty);
 
+    procedure WriteHintDirectives(const AItem: TPasItem);
+    procedure WriteDescription(const AItem: TPasItem);
+    procedure WriteSeeAlso(const AItem: TPasItem);
+
+    procedure HR;
     procedure WritePara(const AText: String);
 
     procedure Indent;
@@ -88,7 +97,7 @@ type
 
     function Hn(AIn: Integer = 0; AAnchor: String = ''): String;
     function AppendEmptyLine(AText: String = ''): String;
-    function Anchor(AText: String): String;
+    //function Anchor(AText: String): String;
     function LinkToAnchor(AText, AAnchor: String): String;
     procedure WriteHeading(AText: String; AAnchor: String = '');
     procedure WithEmptyLine(AText: String = '');
@@ -96,6 +105,7 @@ type
     procedure WriteTableRow(ACells: TStringArray);
 
   public
+    constructor Create(AOwner: TComponent); override;
     procedure WriteDocumentation; override;
     function GetFileExtension: String; override;
   end;
@@ -125,20 +135,20 @@ type
 const
   LE = LineEnding;
   MdElement: array[TMarkdownElement, TMarkdownVariant] of String = (
-  // orig, redmine
-    ('**', '**'), // mdvBoldLeft
-    ('**', '**'), // mdvBoldRight
-    ( '*', '__'), // mdvItalicLeft
-    ( '*', '__'), // mdvItalicRight
-    ( '~', '~'),  // mdvSubscriptLeft,
-    ( '~', '~'),  // mdvSubscriptRight,
-    ( '-', '*'),  // mdvUnorderedList,
-    ( '1.', '#'),  // mdvOrderedList,
-    ( ':'+LE, ' := '),  // mdvDefinitionList,
-    ( '`',  '@'), // mdvInlCodeLeft
-    ( '`',  '@'), // mdvInlCodeRight
-    ( '```',  '<pre><code class="pascal">'), // mdvLongCodeBegin
-    ( '```',  '</code></pre>') // mdvLongCodeEnd
+  // orig, redmine, github
+    ('**', '**', '**'), // mdvBoldLeft
+    ('**', '**', '**'), // mdvBoldRight
+    ( '*', '__', '*'), // mdvItalicLeft
+    ( '*', '__', '*'), // mdvItalicRight
+    ( '~', '~', '<sub>'),  // mdvSubscriptLeft,
+    ( '~', '~', '</sub>'),  // mdvSubscriptRight,
+    ( '-', '*', '-'),  // mdvUnorderedList,
+    ( '1.', '#', '1.'),  // mdvOrderedList,
+    ( ':'+LE, ' := ', ''),  // mdvDefinitionList,
+    ( '`',  '@', '`'), // mdvInlCodeLeft
+    ( '`',  '@', '`'), // mdvInlCodeRight
+    ( '```',  '<pre><code class="pascal">', '```'), // mdvLongCodeBegin
+    ( '```',  '</code></pre>', '```') // mdvLongCodeEnd
   );
 
 function AppSep(S1, S2, ASep: String): String;
@@ -186,7 +196,20 @@ end;
 function TMarkdownDocGenerator.MakeItemLink(const Item: TBaseItem;
   const LinkCaption: String; const LinkContext: TLinkContext): String;
 begin
-  Result := '[' + LinkCaption + '](#' + Item.QualifiedName + ')';
+  Result := LinkToAnchor(LinkCaption, Item.QualifiedName); //'[' + LinkCaption + '](#' + Item.QualifiedName + ')';
+end;
+
+function TMarkdownDocGenerator.OneLineCodeString(const S: String): String;
+begin
+  if IsML(S)
+    then Result := InlineCodeString(ReplaceStr(S, LE, ' '))
+    else Result := InlineCodeString(S);
+end;
+
+function TMarkdownDocGenerator.InlineCodeString(const S: String): String;
+begin
+  Result := MdElement[mdvInlCodeLeft, FVariant] + S +
+    MdElement[mdvInlCodeRight, FVariant];
 end;
 
 function TMarkdownDocGenerator.CodeString(const S: String): String;
@@ -198,8 +221,7 @@ begin
       S + LE +
       MdElement[mdvLongCodeBegin, FVariant] + LE
   else
-    Result := MdElement[mdvInlCodeLeft, FVariant] + S +
-      MdElement[mdvInlCodeRight, FVariant];
+    Result := InlineCodeString(S);
 end;
 
 function TMarkdownDocGenerator.CodeWithLinks(const AItem: TPasItem;
@@ -269,8 +291,6 @@ begin
   if not CreateStream(U.OutputFileName + GetFileExtension) then
     Exit;
 
-  //FVariant := mdvRedmine;
-
   DoMessage(2, pmtInformation, 'Writing Docs for unit "%s"', [U.Name]);
   FIndent := HL;
 
@@ -309,8 +329,8 @@ begin
 
     if U.CIOs.Count > 0 then
     begin
-      WriteHeading('Classes, Interfaces, Objects and Records');
-      WriteTableHeader(['Name', 'Description']);
+      //WriteHeading('Classes, Interfaces, Objects and Records');
+      WriteTableHeader(['Classes, Interfaces, Objects and Records'{'Name'}, 'Description']);
       for I := 0 to Pred(U.CIOs.Count) do
         with U.CIOs.PasItemAt[I] as TPasCIO do
           WriteTableRow([
@@ -322,8 +342,8 @@ begin
 
     if U.FuncsProcs.Count > 0 then
     begin
-      WriteHeading('Functions and Procedures');
-      WriteTableHeader(['Name', 'Description']);
+      //WriteHeading('Functions and Procedures');
+      WriteTableHeader(['Functions and Procedures'{'Name'}, 'Description']);
       for I := 0 to Pred(U.FuncsProcs.Count) do
         with U.FuncsProcs.PasItemAt[I] as TPasRoutine do
           WriteTableRow([
@@ -335,8 +355,8 @@ begin
 
     if U.Types.Count > 0 then
     begin
-      WriteHeading('Types');
-      WriteTableHeader(['Name', 'Description']);
+      //WriteHeading('Types');
+      WriteTableHeader(['Types'{'Name'}, 'Description']);
       for I := 0 to Pred(U.Types.Count) do
         with U.Types.PasItemAt[I] as TPasType do
           WriteTableRow([
@@ -348,8 +368,8 @@ begin
 
     if U.Constants.Count > 0 then
     begin
-      WriteHeading('Constants');
-      WriteTableHeader(['Name', 'Description']);
+      //WriteHeading('Constants');
+      WriteTableHeader(['Constants'{'Name'}, 'Description']);
       for I := 0 to Pred(U.Constants.Count) do
         with U.Constants.PasItemAt[I] as TPasConstant do
           WriteTableRow([
@@ -361,8 +381,8 @@ begin
 
     if U.Variables.Count > 0 then
     begin
-      WriteHeading('Variables');
-      WriteTableHeader(['Name', 'Description']);
+      //WriteHeading('Variables');
+      WriteTableHeader(['Variables'{'Name'}, 'Description']);
       for I := 0 to Pred(U.Variables.Count) do
         with U.Variables.PasItemAt[I] do
           WriteTableRow([
@@ -381,30 +401,37 @@ begin
     if U.CIOs.Count > 0 then
     begin
       WriteHeading('Classes, Interfaces, Objects and Records');
+      Indent;
       for I := 0 to Pred(U.CIOs.Count) do
         WriteStructure(U.CIOs.PasItemAt[I] as TPasCIO);
       WithEmptyLine();
+      UnIndent;
     end;
 
     if U.FuncsProcs.Count > 0 then
     begin
       WriteHeading('Functions and Procedures');
+      Indent;
       for I := 0 to Pred(U.FuncsProcs.Count) do
         WriteRoutine(U.FuncsProcs.PasItemAt[I] as TPasRoutine);
       WithEmptyLine();
+      UnIndent;
     end;
 
     if U.Types.Count > 0 then
     begin
       WriteHeading('Types');
+      Indent;
       for I := 0 to Pred(U.Types.Count) do
         WriteType(U.Types.PasItemAt[I] as TPasType);
       WithEmptyLine();
+      UnIndent;
     end;
 
     if U.Constants.Count > 0 then
     begin
       WriteHeading('Constants');
+      Indent;
       for I := 0 to Pred(U.Constants.Count) do
         WriteConstant(U.Constants.PasItemAt[I] as TPasConstant);
       WithEmptyLine();
@@ -413,9 +440,11 @@ begin
     if U.Variables.Count > 0 then
     begin
       WriteHeading('Variables');
+      Indent;
       for I := 0 to Pred(U.Variables.Count) do
         WriteVariable(U.Variables.PasItemAt[I]);
       WithEmptyLine();
+      UnIndent;
     end;
 
     UnIndent;
@@ -440,8 +469,14 @@ end;
 
 function TMarkdownDocGenerator.FormatAnchor(const Anchor: String): String;
 begin
-  // TODO
-  Result := Format(':anchor: "%s"', [Anchor]);
+  Result := '';
+  if Anchor.IsEmpty then
+    Exit;
+  case FVariant of
+    mdvOrig: Result := '{#' + Anchor + '}';
+    mdvRedmine: Result := '(#' + Anchor + ')';
+    mdvGithub: Result := '<a name="' + GithubAnchor(Anchor) + '"></a>';
+  end;
 end;
 
 function TMarkdownDocGenerator.FormatTable(Table: TTableData): String;
@@ -509,68 +544,58 @@ end;
 procedure TMarkdownDocGenerator.WriteRoutine(const Item: TPasRoutine);
 var
   I: Integer;
+  TypeStr: String;
 begin
-  WriteHeading(
-    RoutineTypeToString(Item.What) + ' ' + ConvertString(Item.Name),
-    Item.QualifiedName);
+  TypeStr := RoutineTypeToString(Item.What);
+  WriteHeading(TypeStr + ' ' + ConvertString(Item.Name), Item.QualifiedName);
 
-  WriteDirectLine(
-      //'| | |' + LE +
-      '| name | ' + ConvertString(Item.Name) + ' |' + LE +
-      '|---:|---|' + LE +
-      //'| type | ' + ConvertString(RoutineTypeToString(Item.What)) + ' |' + LE +
-      '| declaration | ' + ConvertString(CodeString(Item.FullDeclaration)) + ' |' + LE +
-      '| visibility | ' + VisToStr(Item.Visibility) + ' |' );
+  WriteTableHeader([TypeStr{'name'}, ConvertString(Item.Name)]);
+  WriteTableRow(['declaration', ConvertString(OneLineCodeString(Item.FullDeclaration))]);
+  WriteTableRow(['visibility', VisToStr(Item.Visibility)]);
+  WithEmptyLine();
+
+  WriteHintDirectives(Item);
 
   if Item.Params.Count > 0 then
   begin
-    WithEmptyLine();
-    WriteDirectLine('| name | desc |' + LE + '|---|---|');
+    WriteTableHeader(['Parameter'{'name'}, 'Description']);
     for I := 0 to Pred(Item.Params.Count) do
-      WriteDirectLine(
-        '| ' + ConvertString(item.params[i].name) + ' | ' +
-          item.params[i].value + ' |');
+      WriteTableRow([ConvertString(item.params[i].name), item.params[i].value]);
   end;
 
   if Item.Returns <> '' then
-    WriteDirectLine(
-        '| *(result)* | ' + Item.Returns + ' |');
-
+     WriteTableRow([FormatItalic('(result)'), Item.Returns]);
   WithEmptyLine();
 
-  if Item.HasDescription then
-    WritePara(ItemDescription(Item));
+  WriteDescription(Item);
+  WithEmptyLine();
+
+  WriteSeeAlso(Item);
+  WithEmptyLine();
 end;
 
 procedure TMarkdownDocGenerator.WriteConstant(const Item: TPasItem);
 begin
   WriteHeading('Constant ' + ConvertString(Item.Name), Item.QualifiedName);
-  WriteDirectLine(
-    //'| - | - |' + LE +
-    '| name | ' + ConvertString(Item.Name) + ' |' + LE +
-    '|---:|---|' + LE +
-    '| declaration | ' + ConvertString(CodeString(Item.FullDeclaration)) + ' |' + LE +
-    '| visibility | ' + VisToStr(Item.visibility) + ' |');
-
+  WriteTableHeader(['Name', ConvertString(Item.Name)]);
+  WriteTableRow(['declaration', ConvertString(OneLineCodeString(Item.FullDeclaration))]);
+  WriteTableRow(['visibility', VisToStr(Item.Visibility)]);
   WithEmptyLine();
 
-  if Item.HasDescription then
-    WritePara(ItemDescription(Item));
+  WriteDescription(Item);
+  WithEmptyLine();
 end;
 
 procedure TMarkdownDocGenerator.WriteVariable(const Item: TPasItem);
 begin
   WriteHeading('Variable ' + ConvertString(Item.Name), Item.QualifiedName);
-  WriteDirectLine(
-    '| | |' + LE + '|---|---|' + LE +
-    '| var name | ' + ConvertString(Item.Name) + ' |' + LE +
-    '| declaration | ' + ConvertString(Item.FullDeclaration) + ' |' + LE +
-    '| visibility | ' + VisToStr(Item.visibility) + ' |');
-
+  WriteTableHeader(['Name', ConvertString(Item.Name)]);
+  WriteTableRow(['declaration', ConvertString(OneLineCodeString(Item.FullDeclaration))]);
+  WriteTableRow(['visibility', VisToStr(Item.Visibility)]);
   WithEmptyLine();
 
-  if Item.HasDescription then
-    WritePara(ItemDescription(Item));
+  WriteDescription(Item);
+  WithEmptyLine();
 end;
 
 procedure TMarkdownDocGenerator.WriteType(const Item: TPasItem);
@@ -579,22 +604,22 @@ procedure TMarkdownDocGenerator.WriteType(const Item: TPasItem);
   var
     I: Integer;
   begin
-    for I := 0 to Item.Members.Count - 1 do
-      WriteConstant(Item.Members.PasItemAt[i]);
+    WriteTableHeader(['Enum', 'Declaration', 'Comment']);
+    for I := 0 to Pred(Item.Members.Count) do
+      with Item.Members.PasItemAt[I] do
+      //WriteConstant(Item.Members.PasItemAt[i]);
+      WriteTableRow([Name, ConvertString(OneLineCodeString(FullDeclaration)), AbstractDescription]);
   end;
 
 begin
   WriteHeading('Type ' + ConvertString(Item.Name), Item.QualifiedName);
-  WriteDirectLine(
-    '| | |' + LE + '|---|---|' + LE +
-    '| type name | ' + ConvertString(item.Name) + ' |' + LE +
-    '| declaration | ' + ConvertString(item.FullDeclaration)  + ' |' + LE +
-    '| visibility | ' + VisToStr(item.visibility)  + ' |');
-
+  WriteTableHeader(['Name', ConvertString(Item.Name)]);
+  WriteTableRow(['declaration', ConvertString(OneLineCodeString(Item.FullDeclaration))]);
+  WriteTableRow(['visibility', VisToStr(Item.Visibility)]);
   WithEmptyLine();
 
-  if Item.HasDescription then
-    WritePara(ItemDescription(Item));
+  WriteDescription(Item);
+  WithEmptyLine();
 
   if Item is TPasEnum then
   begin
@@ -602,8 +627,6 @@ begin
     WriteEnumMembers(TPasEnum(Item));
     UnIndent;
   end;
-  WithEmptyLine();
-
 end;
 
 procedure TMarkdownDocGenerator.WriteStructure(const Item: TPasCIO);
@@ -635,6 +658,7 @@ begin
   WriteHeading(
     CioTypeToString(Item.MyType) + ' ' + ConvertString(Item.Name),
     Item.QualifiedName);
+  HR;
 
   HasAncestors := Item.Ancestors.Count > 0;
   HasFields := Item.Fields.Count > 0;
@@ -654,7 +678,10 @@ begin
     Hdr := AppSep(Hdr, LinkToAnchor('Properties', Item.QualifiedName + '-props'), ' ');
 
   if not Hdr.IsEmpty then
+  begin
+    //WriteTableHeader(SplitString(Hdr, ' '));
     WithEmptyLine(Hdr);
+  end;
 
   Indent;
 
@@ -685,8 +712,9 @@ begin
 
     if HasFields then
     begin
-      WriteHeading('Fields', Item.QualifiedName + '-fields');
-      WriteTableHeader(['', 'Name', 'Description']);
+      //WriteHeading('Fields', Item.QualifiedName + '-fields');
+      WriteDirectLine(FormatAnchor(Item.QualifiedName + '-fields'));
+      WriteTableHeader(['Field'{'Name'}, '', 'Description']);
       for I := 0 to Pred(Item.Fields.Count) do
         with Item.Fields.PasItemAt[I] do
           WriteTableRow([
@@ -699,8 +727,9 @@ begin
 
     if HasMethods then
     begin
-      WriteHeading('Methods', Item.QualifiedName + '-mths');
-      WriteTableHeader(['', 'Name', 'Description']);
+      //WriteHeading('Methods', Item.QualifiedName + '-mths');
+      WriteDirectLine(FormatAnchor(Item.QualifiedName + '-mths'));
+      WriteTableHeader(['Method'{'Name'}, '', 'Description']);
       for I := 0 to Pred(Item.Methods.Count) do
         with Item.Methods.PasItemAt[I] as TPasRoutine do
           with Item.Methods.PasItemAt[I] do
@@ -714,8 +743,9 @@ begin
 
     if HasProps then
     begin
-      WriteHeading('Properties', Item.QualifiedName + '-props');
-      WriteTableHeader(['', 'Name', 'Description']);
+      //WriteHeading('Properties', Item.QualifiedName + '-props');
+      WriteDirectLine(FormatAnchor(Item.QualifiedName + '-props'));
+      WriteTableHeader(['Property'{'Name'}, '', 'Description']);
       for I := 0 to Pred(Item.Properties.Count) do
         with Item.Properties.PasItemAt[I] as TPasProperty do
           with Item.Properties.PasItemAt[I] do
@@ -732,28 +762,34 @@ begin
     if HasFields then
     begin
       WriteHeading('Fields');
+      Indent;
       for I := 0 to Pred(Item.Fields.Count) do
         WriteVariable(Item.Fields.PasItemAt[I]);
       WithEmptyLine();
+      UnIndent;
     end;
 
     if HasMethods then
     begin
       WriteHeading('Methods');
+      Indent;
       for I := 0 to Pred(Item.Methods.Count) do
         WriteRoutine(Item.Methods.PasItemAt[I] as TPasRoutine);
       WithEmptyLine();
+      UnIndent;
     end;
 
     if HasProps then
     begin
       WriteHeading('Properties');
+      Indent;
       for I := 0 to Pred(Item.Properties.Count) do
         WriteProperty(Item.Properties.PasItemAt[I] as TPasProperty);
       WithEmptyLine();
+      UnIndent;
     end;
 
-    //???
+    // ???
     for I := 0 to Pred(Item.Types.Count) do
       WriteType(Item.Types.PasItemAt[I]);
 
@@ -767,25 +803,99 @@ end;
 procedure TMarkdownDocGenerator.WriteProperty(const Item: TPasProperty);
 begin
   WriteHeading('Property ' + ConvertString(Item.Name), Item.QualifiedName);
-  WriteDirectLine(
-    '| | |' + LE + '|---|---|' + LE +
-    '| property name | ' + ConvertString(Item.name) + ' |' + LE +
-    '| indexdecl | ' + ConvertString(Item.indexDecl) + ' |' + LE +
-    '| type | ' + ConvertString(Item.Proptype) + ' |' + LE +
-    '| reader | ' + ConvertString(Item.reader) + ' |' + LE +
-    '| writer | ' + ConvertString(Item.writer) + ' |' + LE +
-    '| default_in_class | ' + ConvertString(BoolToStr(Item.DefaultInClass, True)) + ' |' + LE +
-    '| default_value | ' + ConvertString(Item.DefaultValue) + ' |' + LE +
-    '| nodefault | ' + ConvertString(BoolToStr(item.NoDefault, True)) + ' |' + LE +
-    '| stored | ' + ConvertString(Item.Stored) + ' |' + LE +
-    '| visibility | ' + VisToStr(Item.Visibility) + ' |');
-
+  WriteTableHeader(['Name', ConvertString(Item.Name)]);
+  WriteTableRow(['declaration', ConvertString(OneLineCodeString(Item.FullDeclaration))]);
+  WriteTableRow(['visibility', VisToStr(Item.Visibility)]);
   WithEmptyLine();
 
-  if Item.HasDescription then
-    WritePara(ItemDescription(Item));
-
+  WriteDescription(Item);
   WithEmptyLine();
+
+  //WriteDirectLine(
+  //  '| | |' + LE + '|---|---|' + LE +
+  //  '| property name | ' + ConvertString(Item.name) + ' |' + LE +
+  //  '| indexdecl | ' + ConvertString(Item.indexDecl) + ' |' + LE +
+  //  '| type | ' + ConvertString(Item.Proptype) + ' |' + LE +
+  //  '| reader | ' + ConvertString(Item.reader) + ' |' + LE +
+  //  '| writer | ' + ConvertString(Item.writer) + ' |' + LE +
+  //  '| default_in_class | ' + ConvertString(BoolToStr(Item.DefaultInClass, True)) + ' |' + LE +
+  //  '| default_value | ' + ConvertString(Item.DefaultValue) + ' |' + LE +
+  //  '| nodefault | ' + ConvertString(BoolToStr(item.NoDefault, True)) + ' |' + LE +
+  //  '| stored | ' + ConvertString(Item.Stored) + ' |' + LE +
+  //  '| visibility | ' + VisToStr(Item.Visibility) + ' |');
+
+end;
+
+procedure TMarkdownDocGenerator.WriteHintDirectives(const AItem: TPasItem);
+begin
+  if hdDeprecated in AItem.HintDirectives then
+    WriteDirect(FormatNote(AppSep('DEPRECATED', AItem.DeprecatedNote, ': ')));
+  if hdPlatform in AItem.HintDirectives then
+    WriteDirect(FormatNote('PLATFORM SPECIFIC'));
+  if hdLibrary in AItem.HintDirectives then
+    WriteDirect(FormatNote('LIBRARY SPECIFIC'));
+  if hdExperimental in AItem.HintDirectives then
+    WriteDirect(FormatNote('EXPERIMENTAL'));
+end;
+
+procedure TMarkdownDocGenerator.WriteDescription(const AItem: TPasItem);
+
+  procedure WriteNoDescription;
+  begin
+    {not imlemented}
+  end;
+
+begin
+  if AItem.AbstractDescription <> '' then
+  begin
+    WriteDirect(AItem.AbstractDescription);
+    if AItem.DetailedDescription <> '' then
+    begin
+      if not AItem.AbstractDescriptionWasAutomatic then
+        WriteDirect(LE+LE);
+      WithEmptyLine(AItem.DetailedDescription);
+    end
+    else
+      WriteDirect(LE+LE);
+  end
+  else if AItem.DetailedDescription <> '' then
+  begin
+    WithEmptyLine(AItem.DetailedDescription);
+  end
+  else
+  begin
+    if (AItem is TPasItem) then
+      WriteNoDescription();
+  end;
+end;
+
+procedure TMarkdownDocGenerator.WriteSeeAlso(const AItem: TPasItem);
+var
+  I: Integer;
+  SeeAlsoItem: TBaseItem;
+  SeeAlsoLink, L, R: String;
+begin
+  if AItem.SeeAlso.Count < 1 then
+    Exit;
+  WriteTableHeader(['See also:', '']);
+  for I := 0 to Pred(AItem.SeeAlso.Count) do
+  begin
+    SeeAlsoLink := SearchLink(AItem.SeeAlso[I].Name, AItem,
+      AItem.SeeAlso[I].Value, lnfWarn, SeeAlsoItem);
+    if SeeAlsoItem <> Nil
+      then L := SeeAlsoLink
+      else L := ConvertString(AItem.SeeAlso[I].Name);
+    if (SeeAlsoItem <> Nil) and (SeeAlsoItem is TPasItem)
+      then R := TPasItem(SeeAlsoItem).AbstractDescription
+      else R := '';
+    WriteTableRow([L, R]);
+  end;
+  WithEmptyLine();
+end;
+
+procedure TMarkdownDocGenerator.HR;
+begin
+  WriteDirectLine('- - -');
 end;
 
 procedure TMarkdownDocGenerator.WritePara(const AText: String);
@@ -806,7 +916,7 @@ end;
 function TMarkdownDocGenerator.Hn(AIn: Integer; AAnchor: String): String;
 begin
   case FVariant of
-    mdvOrig:
+    mdvOrig, mdvGithub:
       begin
         Result := StringOfChar('#', FIndent + AIn) + ' ';
         if not AAnchor.IsEmpty then
@@ -830,7 +940,7 @@ procedure TMarkdownDocGenerator.WriteHeading(AText: String; AAnchor: String);
 begin
   case FVariant of
   // the anchor must be after the text in normal mode!
-    mdvOrig: WriteDirect(Hn() + AppendEmptyLine(AppSep(AText, Anchor(AAnchor), ' ')));
+    mdvOrig, mdvGithub: WriteDirect(Hn() + AppendEmptyLine(AppSep(AText, FormatAnchor(AAnchor), ' ')));
     mdvRedmine: WriteDirect(Hn(0, AAnchor) + AppendEmptyLine(AText));
   end;
 end;
@@ -842,24 +952,27 @@ begin
     else Result := AText + LE + LE;
 end;
 
-function TMarkdownDocGenerator.Anchor(AText: String): String;
+function TMarkdownDocGenerator.GithubAnchor(const Anchor: String): String;
+const
+  Replacements: array{[0..4]} of TCharReplacement = (
+    (cChar: ' '; sSpec: '-'),
+    (cChar:  '.'; sSpec: '-'),
+    (cChar:  #9; sSpec: ''),
+    (cChar: #10; sSpec: ''),
+    (cChar: #13; sSpec: '')
+  );
 begin
-  Result := '';
-  if AText.IsEmpty then
-    Exit;
-  case FVariant of
-    mdvOrig: Result := '{#' + AText + '}';
-    mdvRedmine: Result := '(#' + AText + ')';
-  end;
+  Result := Trim(LowerCase(StringReplaceChars(Anchor, Replacements))) + 'Z';
 end;
 
 function TMarkdownDocGenerator.LinkToAnchor(AText, AAnchor: String): String;
 begin
   case FVariant of
     mdvOrig: Result := '[' + AText + '](#' + AAnchor + ')';
+    mdvGithub: Result := '[' + AText + '](#' + GithubAnchor(AAnchor) + ')';
     //mdvRedmine: '[[' + AText + '|#' + AAnchor + ']]'; // DOESN'T WORK!
   else
-    Result := '';
+    Result := AText;
   end;
 end;
 
@@ -873,7 +986,7 @@ var
   H, L, S: String;
 begin
   case FVariant of
-    mdvOrig:
+    mdvOrig, mdvGithub:
       begin
         H := ''; L := '';
         for S in AHeaders do
@@ -906,8 +1019,16 @@ begin
   WriteDirectLine(R + '|');
 end;
 
+constructor TMarkdownDocGenerator.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  FVariant := mdvGithub;
+end;
+
 procedure TMarkdownDocGenerator.WriteDocumentation;
 begin
+  FVariant := mdvGithub;
+
   //StartSpellChecking('sgml');
   inherited;
   WriteUnits(1);
