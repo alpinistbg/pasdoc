@@ -327,7 +327,7 @@ begin
       for I := 0 to Pred(U.FuncsProcs.Count) do
         with U.FuncsProcs.PasItemAt[I] as TPasRoutine do
           WriteTableRow([
-            ReplaceStr(FullDeclaration, Name, MakeItemLink(U.FuncsProcs.PasItemAt[I], Name, lcNormal)),
+            CodeWithLinks(U, FullDeclaration),
             AbstractDescription
           ]);
       WithEmptyLine();
@@ -340,7 +340,6 @@ begin
       for I := 0 to Pred(U.Types.Count) do
         with U.Types.PasItemAt[I] as TPasType do
           WriteTableRow([
-            //ReplaceStr(FullDeclaration, Name, MakeItemLink(U.Types.PasItemAt[I], Name, lcNormal) ) +
             CodeWithLinks(U, FullDeclaration),
             AbstractDescription
           ]);
@@ -354,7 +353,7 @@ begin
       for I := 0 to Pred(U.Constants.Count) do
         with U.Constants.PasItemAt[I] as TPasConstant do
           WriteTableRow([
-            ReplaceStr(FullDeclaration, Name, MakeItemLink(U.Constants.PasItemAt[I], Name, lcNormal)),
+            CodeWithLinks(U, FullDeclaration),
             AbstractDescription
           ]);
       WithEmptyLine();
@@ -367,7 +366,7 @@ begin
       for I := 0 to Pred(U.Variables.Count) do
         with U.Variables.PasItemAt[I] do
           WriteTableRow([
-            ReplaceStr(FullDeclaration, Name, MakeItemLink(U.Variables.PasItemAt[I], Name, lcNormal)),
+            CodeWithLinks(U, FullDeclaration),
             AbstractDescription
           ]);
       WithEmptyLine();
@@ -610,135 +609,159 @@ end;
 procedure TMarkdownDocGenerator.WriteStructure(const Item: TPasCIO);
 var
   I: Integer;
+  HasAncestors, HasFields, HasMethods, HasProps: Boolean;
+  Hdr: String;
+
+  function ComposeDecl: String;
+  var
+    I: Integer;
+    AncestorList: String;
+  begin
+    Result := 'type ' + Item.NameWithGeneric + ' = ' +
+      CioTypeToString(Item.MyType) +
+      GetClassDirectiveName(Item.ClassDirective);
+    if Item.Ancestors.Count > 0 then
+    begin
+      AncestorList := '';
+      for I := 0 to Pred(Item.Ancestors.Count) do
+        AncestorList := AppSep(AncestorList, Item.Ancestors[I].Value, ', ');
+      Result := Result + '(' + AncestorList + ')';
+    end;
+    if Item.ClassDirective = CT_HELPER then
+      Result := AppSep(Result, Item.HelperTypeIdentifier, ' for ');
+  end;
+
 begin
   WriteHeading(
     CioTypeToString(Item.MyType) + ' ' + ConvertString(Item.Name),
     Item.QualifiedName);
 
-  WithEmptyLine(
+  HasAncestors := Item.Ancestors.Count > 0;
+  HasFields := Item.Fields.Count > 0;
+  HasMethods := Item.Methods.Count > 0;
+  HasProps := Item.Properties.Count > 0;
 
-    LinkToAnchor('Description', Item.QualifiedName + '-desc') + ' ' +
-    LinkToAnchor('Hierarchy', Item.QualifiedName + '-hier') + ' ' +
-    LinkToAnchor('Fields', Item.QualifiedName + '-fields') + ' ' +
-    LinkToAnchor('Methods',  Item.QualifiedName + '-mths') + ' ' +
-    LinkToAnchor('Properties', Item.QualifiedName + '-props'));
+  Hdr := '';
+  if Item.HasDescription then
+    Hdr := AppSep(Hdr, LinkToAnchor('Description', Item.QualifiedName + '-desc'), ' ');
+  if HasAncestors then
+    Hdr := AppSep(Hdr, LinkToAnchor('Hierarchy', Item.QualifiedName + '-hier'), ' ');
+  if HasFields then
+    Hdr := AppSep(Hdr, LinkToAnchor('Fields', Item.QualifiedName + '-fields'), ' ');
+  if HasMethods then
+    Hdr := AppSep(Hdr, LinkToAnchor('Methods',  Item.QualifiedName + '-mths'), ' ');
+  if HasProps then
+    Hdr := AppSep(Hdr, LinkToAnchor('Properties', Item.QualifiedName + '-props'), ' ');
 
-
-    //WriteDirectLine(
-    //'| | |' + LE + '|---|---|' + LE +
-    //'| structure name | ' + ConvertString(Item.name) + ' |' + LE +
-    //'| name_with_generic | ' + ConvertString(Item.NameWithGeneric) + ' |' + LE +
-    //'| type | ' + ConvertString(CioTypeToString(Item.MyType)) + ' |' + LE +
-    //'| visibility | ' + VisToStr(Item.visibility) + ' |');
+  if not Hdr.IsEmpty then
+    WithEmptyLine(Hdr);
 
   Indent;
 
-  // No Item.FullDeclaration? How it is handled in HTML?
   WriteHeading('Declaration');
-
-  FormatPascalCode(Item.FullDeclaration);
+  WritePara(CodeWithLinks(Item.MyUnit, ComposeDecl));
   WithEmptyLine();
-
-  WriteHeading('Description', Item.QualifiedName + '-desc');
 
   if Item.HasDescription then
+  begin
+    WriteHeading('Description', Item.QualifiedName + '-desc');
     WritePara(ItemDescription(Item));
-  WithEmptyLine();
+    WithEmptyLine();
+  end;
 
-  WriteHeading('Hierarchy', Item.QualifiedName + '-hier');
+  if HasAncestors then
+  begin
+    WriteHeading('Hierarchy', Item.QualifiedName + '-hier');
+    for I := 0 to Pred(Item.Ancestors.Count) do
+      WriteDirectLine(MdElement[mdvUnorderedList, FVariant] + ' ' + Item.Ancestors[I].Name);
+    WithEmptyLine();
+  end;
 
-  for I := 0 to Pred(Item.Ancestors.Count) do
-    //WriteDirectLine(
-    //  '| | |' + LE + '|---|---|' + LE +
-    //  '| ancestor name | ' + ConvertString(Item.Ancestors[I].Name) + ' |' + LE +
-    //  '| declaration | ' + ConvertString(Item.Ancestors[I].Value) + ' |');
-    WriteDirectLine(MdElement[mdvUnorderedList, FVariant] + ' ' + Item.Ancestors[I].Name);
-  WithEmptyLine();
-
-  if (Item.Fields.Count > 0) or (Item.Methods.Count > 0) or
-    (Item.Properties.Count > 0)
-  then
+  if HasFields or HasMethods or HasProps then
   begin
     WriteHeading('Overview');
 
     Indent;
 
-    if Item.Fields.Count > 0 then
+    if HasFields then
     begin
       WriteHeading('Fields', Item.QualifiedName + '-fields');
-      WriteDirectLine('|| Name | Description |' + LE + '|---|:---|:---|');
+      WriteTableHeader(['', 'Name', 'Description']);
       for I := 0 to Pred(Item.Fields.Count) do
         with Item.Fields.PasItemAt[I] do
-          WritePara(
-            '|' + FormatSubsc(VisToStr(Visibility)) +
-            '|' + CodeWithLinks(Item, FullDeclaration) +
-            '|' + AbstractDescription +
-            '|');
+          WriteTableRow([
+            FormatSubsc(VisToStr(Visibility)),
+            CodeWithLinks(Item, FullDeclaration),
+            AbstractDescription
+          ]);
       WithEmptyLine();
     end;
 
-    if Item.Methods.Count > 0 then
+    if HasMethods then
     begin
       WriteHeading('Methods', Item.QualifiedName + '-mths');
-      WriteDirectLine('|| Name | Description |' + LE + '|---|:---|:---|');
+      WriteTableHeader(['', 'Name', 'Description']);
       for I := 0 to Pred(Item.Methods.Count) do
         with Item.Methods.PasItemAt[I] as TPasRoutine do
-          WritePara(
-            '|' + FormatSubsc(VisToStr(Visibility)) +
-            '|' + CodeWithLinks(Item, FullDeclaration) +
-            '|' + AbstractDescription +
-            '|');
+          with Item.Methods.PasItemAt[I] do
+            WriteTableRow([
+              FormatSubsc(VisToStr(Visibility)),
+              CodeWithLinks(Item, FullDeclaration),
+              AbstractDescription
+            ]);
       WithEmptyLine();
     end;
 
-    if Item.Properties.Count > 0 then
+    if HasProps then
     begin
       WriteHeading('Properties', Item.QualifiedName + '-props');
-      WriteDirectLine('|| Name | Description |' + LE + '|---|:---|:---|');
+      WriteTableHeader(['', 'Name', 'Description']);
       for I := 0 to Pred(Item.Properties.Count) do
         with Item.Properties.PasItemAt[I] as TPasProperty do
-          WritePara(
-            '|' + FormatSubsc(VisToStr(Visibility)) +
-            '|' + CodeWithLinks(Item, FullDeclaration) +
-            '|' + AbstractDescription +
-            '|');
+          with Item.Properties.PasItemAt[I] do
+            WriteTableRow([
+              FormatSubsc(VisToStr(Visibility)),
+              CodeWithLinks(Item, FullDeclaration),
+              AbstractDescription
+            ]);
       WithEmptyLine();
     end;
 
     UnIndent;
 
-    WriteHeading('Fields');
+    if HasFields then
+    begin
+      WriteHeading('Fields');
+      for I := 0 to Pred(Item.Fields.Count) do
+        WriteVariable(Item.Fields.PasItemAt[I]);
+      WithEmptyLine();
+    end;
 
-    for I := 0 to Pred(Item.Fields.Count) do
-      WriteVariable(Item.Fields.PasItemAt[I]);
-    WithEmptyLine();
+    if HasMethods then
+    begin
+      WriteHeading('Methods');
+      for I := 0 to Pred(Item.Methods.Count) do
+        WriteRoutine(Item.Methods.PasItemAt[I] as TPasRoutine);
+      WithEmptyLine();
+    end;
 
-    WriteHeading('Methods');
-
-    //for I := 0 to Item.Methods.Count - 1 do
-    //  with Item.Methods.PasItemAt[I] as TPasRoutine do
-    //    WriteDirectLine('- [' + Name + '](#' + QualifiedName + ')');
-    for I := 0 to Item.Methods.Count - 1 do
-      WriteRoutine(Item.Methods.PasItemAt[I] as TPasRoutine);
-    WithEmptyLine();
-
-    WriteHeading('Properties');
-
-    for I := 0 to Item.Properties.Count - 1 do
-      WriteProperty(Item.Properties.PasItemAt[I] as TPasProperty);
-    WithEmptyLine();
+    if HasProps then
+    begin
+      WriteHeading('Properties');
+      for I := 0 to Pred(Item.Properties.Count) do
+        WriteProperty(Item.Properties.PasItemAt[I] as TPasProperty);
+      WithEmptyLine();
+    end;
 
     //???
-
-    for I := 0 to Item.Types.Count - 1 do
+    for I := 0 to Pred(Item.Types.Count) do
       WriteType(Item.Types.PasItemAt[I]);
 
-    for I := 0 to Item.Cios.Count - 1 do
+    for I := 0 to Pred(Item.Cios.Count) do
       WriteStructure(Item.Cios.PasItemAt[I] as TPasCio);
 
-    UnIndent;
-
   end;
+  UnIndent;
 end;
 
 procedure TMarkdownDocGenerator.WriteProperty(const Item: TPasProperty);
