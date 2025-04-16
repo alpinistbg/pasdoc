@@ -86,7 +86,7 @@ type
     procedure WriteDescription(const AItem: TPasItem);
     procedure WriteSeeAlso(const AItem: TPasItem);
     procedure WritePasItem(const AItem: TPasItem);
-    procedure WriteDatesAuthor(const AItem: TPasItem);
+    procedure WriteDatesAuthor(const AItem: TPasItem; Header: Boolean = False);
 
     procedure HR;
     procedure WritePara(const AText: String);
@@ -351,6 +351,8 @@ begin
 
   Indent;
 
+  WriteDatesAuthor(U, True);
+
   // Used units
   if WriteUsesClause and not IsEmpty(U.UsesUnits) then
   begin
@@ -494,8 +496,6 @@ begin
     UnIndent;
 
   end;
-
-  WriteDatesAuthor(U);
 
   UnIndent;
 end;
@@ -797,6 +797,8 @@ begin
     WithEmptyLine();
   end;
 
+  WriteDatesAuthor(AItem, True);
+
   if HasAncestors then
   begin
     WriteHeading('Hierarchy', AItem.QualifiedName + '-hier');
@@ -898,8 +900,6 @@ begin
       WriteStructure(AItem.Cios.PasItemAt[I] as TPasCio);
 
   end;
-
-  WriteDatesAuthor(AItem);
 
   UnIndent;
 end;
@@ -1039,28 +1039,7 @@ begin
   WriteTableRow(['visibility', VisToStr(AItem.Visibility)]);
   if not LinksText.IsEmpty then
     WriteTableRow(['related', LinksText]);
-  if not AItem.Created.IsEmpty then
-    WriteTableRow(['created', AItem.Created]);
-  if not AItem.LastMod.IsEmpty then
-    WriteTableRow(['modified', AItem.LastMod]);
-
-  if AItem.Authors.Count > 0 then
-  begin
-    S3 := 'author' + IfThen(AItem.Authors.Count > 1, 's');
-    for S in AItem.Authors do
-    begin
-      if ExtractEmailAddress(S, S1, S2, Address) then
-        S1 := S1 + LinkTo(Address, 'mailto:' + Address) + S2
-      else if ExtractWebAddress(s, S1, S2, Address) then
-        // ExtractWebAddress is WRONG!
-        S1 := S1 + LinkTo(Address, 'http://' + Address) + S2
-      else
-        S1 := S;
-      WriteTableRow([S3, S1]);
-      S3 := '';
-    end;
-  end;
-
+  WriteDatesAuthor(AItem);
   WithEmptyLine();
 
   WriteHintDirectives(AItem);
@@ -1098,38 +1077,41 @@ begin
   WithEmptyLine();
 end;
 
-procedure TMarkdownDocGenerator.WriteDatesAuthor(const AItem: TPasItem);
+procedure TMarkdownDocGenerator.WriteDatesAuthor(const AItem: TPasItem;
+  Header: Boolean);
 var
-  Author, AuthorName, AuthorTail, AuthorAddress: String;
+  {Author, AuthorName, AuthorTail, AuthorAddress,} S3, S, S2, S1,
+    Address: String;
 begin
-  if not AItem.Created.IsEmpty then
-  begin
-    WriteHeading('Created');
-    WithEmptyLine(AItem.Created);
-  end;
+  if AItem.Created.IsEmpty and AItem.LastMod.IsEmpty and (AItem.Authors.Count < 1) then
+    Exit;
 
+  if Header then
+    WriteTableHeader(['date', 'value']);
+
+  if not AItem.Created.IsEmpty then
+    WriteTableRow(['created', AItem.Created]);
   if not AItem.LastMod.IsEmpty then
-  begin
-    WriteHeading('Modified');
-    WithEmptyLine(AItem.LastMod);
-  end;
+    WriteTableRow(['modified', AItem.LastMod]);
 
   if AItem.Authors.Count > 0 then
   begin
-    WriteHeading('Author' + IfThen(AItem.Authors.Count > 1, 's'));
-    for Author in AItem.Authors do
+    S3 := 'author' + IfThen(AItem.Authors.Count > 1, 's');
+    for S in AItem.Authors do
     begin
-      if ExtractEmailAddress(Author, AuthorName, AuthorTail, AuthorAddress) then
-        AuthorName := AuthorName + LinkTo(AuthorAddress, 'mailto:' + AuthorAddress) + AuthorTail
-      else if ExtractWebAddress(Author, AuthorName, AuthorTail, AuthorAddress) then
-        // ExtractWebAddress is WRONG!
-        AuthorName := AuthorName + LinkTo(AuthorAddress, 'http://' + AuthorAddress) + AuthorTail
+      if ExtractEmailAddress(S, S1, S2, Address) then
+        S1 := S1 + LinkTo(Address, 'mailto:' + Address) + S2
+      else if ExtractWebAddress(s, S1, S2, Address) then
+        // ExtractWebAddress is WRONG when there are trailing chars!
+        S1 := S1 + LinkTo(Address, 'http://' + Address) + S2
       else
-        AuthorName := Author;
-      WriteDirectLine(MdElement[mdvUnorderedList, FVariant] + ' ' + AuthorName);
+        S1 := S;
+      WriteTableRow([S3, S1]);
+      S3 := '';
     end;
-    WithEmptyLine();
   end;
+  if Header then
+    WithEmptyLine();
 end;
 
 procedure TMarkdownDocGenerator.HR;
