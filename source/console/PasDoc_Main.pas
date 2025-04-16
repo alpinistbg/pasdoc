@@ -497,9 +497,9 @@ begin
   begin
     PasDoc.Generator := SetSimpleXMLOptions(TSimpleXMLDocGenerator.Create(PasDoc));
   end else
-  if OptionFormat.Value = 'markdown' then
+  if StartsStr('markdown', OptionFormat.Value) then
   begin
-    PasDoc.Generator := SetMarkdownOptions(TMarkdownDocGenerator.Create(PasDoc));
+    PasDoc.Generator := SetMarkdownOptions(TMarkdownDocGenerator.Create(PasDoc, OptionFormat.Value));
   end else
   if OptionFormat.Value = 'latex' then
   begin

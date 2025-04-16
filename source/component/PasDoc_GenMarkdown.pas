@@ -105,7 +105,7 @@ type
     procedure WriteTableRow(ACells: TStringArray);
 
   public
-    constructor Create(AOwner: TComponent); override;
+    constructor Create(AOwner: TComponent; AFormat: String); reintroduce;
     procedure WriteDocumentation; override;
     function GetFileExtension: String; override;
   end;
@@ -129,7 +129,8 @@ type
     mdvInlCodeLeft,
     mdvInlCodeRight,
     mdvLongCodeBegin,
-    mdvLongCodeEnd
+    mdvLongCodeEnd,
+    mdvLineBreak
   );
 
 const
@@ -148,7 +149,8 @@ const
     ( '`',  '@', '`'), // mdvInlCodeLeft
     ( '`',  '@', '`'), // mdvInlCodeRight
     ( '```',  '<pre><code class="pascal">', '```'), // mdvLongCodeBegin
-    ( '```',  '</code></pre>', '```') // mdvLongCodeEnd
+    ( '```',  '</code></pre>', '```'), // mdvLongCodeEnd
+    ( '<br>', '<br>', '<br>') // mdvLineBreak
   );
 
 function AppSep(S1, S2, ASep: String): String;
@@ -196,13 +198,24 @@ end;
 function TMarkdownDocGenerator.MakeItemLink(const Item: TBaseItem;
   const LinkCaption: String; const LinkContext: TLinkContext): String;
 begin
-  Result := LinkToAnchor(LinkCaption, Item.QualifiedName); //'[' + LinkCaption + '](#' + Item.QualifiedName + ')';
+  Result := LinkToAnchor(LinkCaption, Item.QualifiedName);
+end;
+
+function ReplaceML(const S: String): String;
+const
+  Replacements: array of TCharReplacement = (
+    (cChar:  #9; sSpec: ' '),
+    (cChar: #10; sSpec: ' '),
+    (cChar: #13; sSpec: ' ')
+  );
+begin
+  Exit(StringReplaceChars(S, Replacements));
 end;
 
 function TMarkdownDocGenerator.OneLineCodeString(const S: String): String;
 begin
   if IsML(S)
-    then Result := InlineCodeString(ReplaceStr(S, LE, ' '))
+    then Result := InlineCodeString(ReplaceML(S))
     else Result := InlineCodeString(S);
 end;
 
@@ -231,16 +244,30 @@ const
     ['.', '_', '0'..'9', 'A'..'Z', 'a'..'z'];
   IdentNonStart: TSysCharSet = ['.', '0'..'9'];
 var
-  P: Integer = 1;
+  P: Integer;
   FoundPos: Integer;
-  S, LinkText: String;
+  S, LinkText, Brk: String;
   FoundItem: TBaseItem;
 begin
-  Result := ACode;
+  Result := ReplaceML(ACode);
+
+  // Split the string after the 80-th column
+  P := 80;
+  Brk := MdElement[mdvLineBreak, FVariant];
+  while P < Length(Result) do
+  begin
+    ExtractSubstr(Result, P, [' ', #9]);
+    if P < Length(Result) then
+    begin
+      Result := Copy(Result, 1, P - 1) + Brk + Copy(Result, P, MaxInt);
+      Inc(P, 80{Length(Brk) - 1});
+    end;
+  end;
+
+  P := 1;
   // Redmine links not working so far
   if FVariant = mdvRedmine then
-    Exit;
-  repeat
+  else repeat
     FoundPos := P;
     S := ExtractSubstr(Result, P, IdentDelims);
     if S.IsEmpty or (S[1] in IdentNonStart) then
@@ -358,7 +385,8 @@ begin
       //WriteHeading('Types');
       WriteTableHeader(['Types'{'Name'}, 'Description']);
       for I := 0 to Pred(U.Types.Count) do
-        with U.Types.PasItemAt[I] as TPasType do
+        // Gives a typecast exception on a procedure of object type
+        with U.Types.PasItemAt[I] {as TPasType} do
           WriteTableRow([
             CodeWithLinks(U, FullDeclaration),
             AbstractDescription
@@ -423,7 +451,8 @@ begin
       WriteHeading('Types');
       Indent;
       for I := 0 to Pred(U.Types.Count) do
-        WriteType(U.Types.PasItemAt[I] as TPasType);
+        // Gives a typecast exception on a procedure of object type
+        WriteType(U.Types.PasItemAt[I] {as TPasType});
       WithEmptyLine();
       UnIndent;
     end;
@@ -613,7 +642,7 @@ procedure TMarkdownDocGenerator.WriteType(const Item: TPasItem);
 
 begin
   WriteHeading('Type ' + ConvertString(Item.Name), Item.QualifiedName);
-  WriteTableHeader(['Name', ConvertString(Item.Name)]);
+  WriteTableHeader([{'Name',} ConvertString(Item.Name), '']);
   WriteTableRow(['declaration', ConvertString(OneLineCodeString(Item.FullDeclaration))]);
   WriteTableRow(['visibility', VisToStr(Item.Visibility)]);
   WithEmptyLine();
@@ -660,7 +689,7 @@ begin
     Item.QualifiedName);
   HR;
 
-  HasAncestors := Item.Ancestors.Count > 0;
+  HasAncestors := Item.Ancestors.Count > 1{0}; // Always >0
   HasFields := Item.Fields.Count > 0;
   HasMethods := Item.Methods.Count > 0;
   HasProps := Item.Properties.Count > 0;
@@ -803,7 +832,7 @@ end;
 procedure TMarkdownDocGenerator.WriteProperty(const Item: TPasProperty);
 begin
   WriteHeading('Property ' + ConvertString(Item.Name), Item.QualifiedName);
-  WriteTableHeader(['Name', ConvertString(Item.Name)]);
+  WriteTableHeader([''{'Name'}, ConvertString(Item.Name)]);
   WriteTableRow(['declaration', ConvertString(OneLineCodeString(Item.FullDeclaration))]);
   WriteTableRow(['visibility', VisToStr(Item.Visibility)]);
   WithEmptyLine();
@@ -900,7 +929,7 @@ end;
 
 procedure TMarkdownDocGenerator.WritePara(const AText: String);
 begin
-  WriteDirectLine({FPara +} AText);
+  WriteDirectLine(AText);
 end;
 
 procedure TMarkdownDocGenerator.Indent;
@@ -954,7 +983,7 @@ end;
 
 function TMarkdownDocGenerator.GithubAnchor(const Anchor: String): String;
 const
-  Replacements: array{[0..4]} of TCharReplacement = (
+  Replacements: array of TCharReplacement = (
     (cChar: ' '; sSpec: '-'),
     (cChar:  '.'; sSpec: '-'),
     (cChar:  #9; sSpec: ''),
@@ -1019,23 +1048,24 @@ begin
   WriteDirectLine(R + '|');
 end;
 
-constructor TMarkdownDocGenerator.Create(AOwner: TComponent);
+constructor TMarkdownDocGenerator.Create(AOwner: TComponent; AFormat: String);
 begin
   inherited Create(AOwner);
-  FVariant := mdvGithub;
+  case AFormat of
+    'markdown-redmine': FVariant := mdvRedmine;
+    'markdown-github': FVariant := mdvGithub;
+  otherwise
+    FVariant := mdvOrig;
+  end;
 end;
 
 procedure TMarkdownDocGenerator.WriteDocumentation;
 begin
-  FVariant := mdvGithub;
-
-  //StartSpellChecking('sgml');
   inherited;
   WriteUnits(1);
   WriteIntroduction;
   WriteAdditionalFiles;
   WriteConclusion;
-  //EndSpellChecking;
 end;
 
 function TMarkdownDocGenerator.GetFileExtension: String;
