@@ -213,8 +213,30 @@ end;
 
 function TMarkdownDocGenerator.FormatTableOfContents(Sections: TStringPairVector
   ): string;
+var
+  Elm: String;
+  ElmOfs: Integer;
+
+  function FormatTOC(ASects: TStringPairVector; Level: Integer): String;
+  var
+    I: Integer;
+    Prefix: String;
+  begin
+    Result := '';
+    case FVariant of
+      mdvOrig, mdvGithub: Prefix := StringOfChar(' ', Level * ElmOfs) + Elm;
+      mdvRedmine: Prefix := StringOfChar(Elm[1], Level);
+    end;
+    for I := 0 to Pred(ASects.Count) do
+      Result := Result + LE + Prefix + ' ' +
+        LinkToAnchor(ASects[I].Value, ASects[I].Name) +
+        FormatTOC(TStringPairVector(ASects[I].Data), Level + 1);
+  end;
+
 begin
-  Result := inherited FormatTableOfContents(Sections);
+  Elm := MdElement[mdvOrderedList, FVariant];
+  ElmOfs := Length(Elm) + 1;
+  Result := FormatTOC(Sections, 0) + LE + LE;
 end;
 
 function TMarkdownDocGenerator.MakeItemLink(const AItem: TBaseItem;
