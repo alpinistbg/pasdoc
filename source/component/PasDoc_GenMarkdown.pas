@@ -36,7 +36,8 @@ uses
   PasDoc_Languages,
   PasDoc_StringVector,
   PasDoc_Types,
-  PasDoc_StringPairVector;
+  PasDoc_StringPairVector,
+  PasDoc_Base;
 
 type
 
@@ -54,6 +55,7 @@ type
     function ConvertString(const S: String): String; override;
     function ConvertChar(C: Char): String; override;
     procedure WriteUnit(const HL: Integer; const U: TPasUnit); override;
+    function DistinctName(const AItem: TPasItem): String;
 
     procedure WriteExternalCore(const ExternalItem: TExternalItem;
       const Id: TTranslationID); override;
@@ -73,6 +75,9 @@ type
     function MakeItemLink(const AItem: TBaseItem; const LinkCaption: String;
       const LinkContext: TLinkContext): String; override;
   private
+    FPasDoc: TPasDoc;
+    FSoleUnit: Boolean;
+    FHasProjectName: Boolean;
     FVariant: TMarkdownVariant;
     FPara: String;
     FIndent: Integer;
@@ -110,10 +115,13 @@ type
     procedure WriteType(const AItem: TPasItem);
     procedure WriteStructure(const AItem: TPasCIO);
     procedure WriteProperty(const AItem: TPasProperty);
+    procedure WriteProjHeader;
   public
     constructor Create(AOwner: TComponent; AFormat: String); reintroduce;
     procedure WriteDocumentation; override;
     function GetFileExtension: String; override;
+    property HasProjectName: Boolean read FHasProjectName write FHasProjectName;
+    property PasDoc: TPasDoc read FPasDoc write FPasDoc;
   end;
 
 implementation
@@ -316,7 +324,8 @@ var
   I: Integer;
   S: String;
 begin
-  if not Assigned(U) then begin
+  if not Assigned(U) then
+  begin
     DoMessage(1, pmtError, 'TMarkdownDocGenerator.WriteUnit: ' +
       'Unit variable has not been initialized.', []);
     Exit;
@@ -330,13 +339,10 @@ begin
     Exit;
   end;
 
-  if not CreateStream(U.OutputFileName + GetFileExtension) then
-    Exit;
-
   DoMessage(2, pmtInformation, 'Writing Docs for unit "%s"', [U.Name]);
   FIndent := HL;
 
-  WriteHeading('Unit ' + U.Name, U.QualifiedName);
+  WriteHeading('Unit ' + DistinctName(U), U.QualifiedName);
 
   if FVariant = mdvRedmine then
   begin
@@ -500,6 +506,13 @@ begin
   UnIndent;
 end;
 
+function TMarkdownDocGenerator.DistinctName(const AItem: TPasItem): String;
+begin
+  if FSoleUnit
+    then Result := AItem.Name
+    else Result := AItem.QualifiedName;
+end;
+
 procedure TMarkdownDocGenerator.WriteExternalCore(
   const ExternalItem: TExternalItem; const Id: TTranslationID);
 begin
@@ -616,7 +629,7 @@ var
   Links: TStringList;
 begin
   TypeStr := RoutineTypeToString(AItem.What);
-  WriteHeading(TypeStr + ' ' + ConvertString(AItem.Name), AItem.QualifiedName);
+  WriteHeading(TypeStr + ' ' + DistinctName(AItem), AItem.QualifiedName);
 
   WritePasItem(AItem);
 
@@ -676,9 +689,9 @@ end;
 
 procedure TMarkdownDocGenerator.WriteConstant(const AItem: TPasItem);
 begin
-  WriteHeading('Constant ' + ConvertString(AItem.Name), AItem.QualifiedName);
-  WriteTableHeader(['Name', ConvertString(AItem.Name)]);
-  WriteTableRow(['declaration', ConvertString(OneLineCodeString(AItem.FullDeclaration))]);
+  WriteHeading('Constant ' + DistinctName(AItem), AItem.QualifiedName);
+  WriteTableHeader(['Name', AItem.Name]);
+  WriteTableRow(['declaration', OneLineCodeString(AItem.FullDeclaration)]);
   WriteTableRow(['visibility', VisToStr(AItem.Visibility)]);
   WithEmptyLine();
 
@@ -688,15 +701,8 @@ end;
 
 procedure TMarkdownDocGenerator.WriteVariable(const AItem: TPasItem);
 begin
-  WriteHeading('Variable ' + ConvertString(AItem.Name), AItem.QualifiedName);
+  WriteHeading('Variable ' + DistinctName(AItem), AItem.QualifiedName);
   WritePasItem(AItem);
-  //WriteTableHeader(['Name', ConvertString(AItem.Name)]);
-  //WriteTableRow(['declaration', ConvertString(OneLineCodeString(AItem.FullDeclaration))]);
-  //WriteTableRow(['visibility', VisToStr(AItem.Visibility)]);
-  //WithEmptyLine();
-  //
-  //WriteDescription(AItem);
-  //WithEmptyLine();
 end;
 
 procedure TMarkdownDocGenerator.WriteType(const AItem: TPasItem);
@@ -713,9 +719,9 @@ procedure TMarkdownDocGenerator.WriteType(const AItem: TPasItem);
   end;
 
 begin
-  WriteHeading('Type ' + ConvertString(AItem.Name), AItem.QualifiedName);
-  WriteTableHeader([{'Name',} ConvertString(AItem.Name), '']);
-  WriteTableRow(['declaration', ConvertString(OneLineCodeString(AItem.FullDeclaration))]);
+  WriteHeading('Type ' + DistinctName(AItem), AItem.QualifiedName);
+  WriteTableHeader([AItem.Name, '']);
+  WriteTableRow(['declaration', OneLineCodeString(AItem.FullDeclaration)]);
   WriteTableRow(['visibility', VisToStr(AItem.Visibility)]);
   WithEmptyLine();
 
@@ -757,7 +763,7 @@ var
 
 begin
   WriteHeading(
-    CioTypeToString(AItem.MyType) + ' ' + ConvertString(AItem.Name),
+    CioTypeToString(AItem.MyType) + ' ' + DistinctName(AItem),
     AItem.QualifiedName);
   HR;
 
@@ -906,30 +912,39 @@ end;
 
 procedure TMarkdownDocGenerator.WriteProperty(const AItem: TPasProperty);
 begin
-  WriteHeading('Property ' + ConvertString(AItem.Name), AItem.QualifiedName);
+  WriteHeading('Property ' + DistinctName(AItem), AItem.QualifiedName);
   WritePasItem(AItem);
+end;
 
-  //WriteTableHeader(['property', ConvertString(AItem.Name)]);
-  //WriteTableRow(['declaration', ConvertString(OneLineCodeString(AItem.FullDeclaration))]);
-  //WriteTableRow(['visibility', VisToStr(AItem.Visibility)]);
-  //WithEmptyLine();
-  //
-  //WriteDescription(AItem);
-  //WithEmptyLine();
-
-  //WriteDirectLine(
-  //  '| | |' + LE + '|---|---|' + LE +
-  //  '| property name | ' + ConvertString(AItem.name) + ' |' + LE +
-  //  '| indexdecl | ' + ConvertString(AItem.indexDecl) + ' |' + LE +
-  //  '| type | ' + ConvertString(AItem.Proptype) + ' |' + LE +
-  //  '| reader | ' + ConvertString(AItem.reader) + ' |' + LE +
-  //  '| writer | ' + ConvertString(AItem.writer) + ' |' + LE +
-  //  '| default_in_class | ' + ConvertString(BoolToStr(AItem.DefaultInClass, True)) + ' |' + LE +
-  //  '| default_value | ' + ConvertString(AItem.DefaultValue) + ' |' + LE +
-  //  '| nodefault | ' + ConvertString(BoolToStr(AItem.NoDefault, True)) + ' |' + LE +
-  //  '| stored | ' + ConvertString(AItem.Stored) + ' |' + LE +
-  //  '| visibility | ' + VisToStr(AItem.Visibility) + ' |');
-
+procedure TMarkdownDocGenerator.WriteProjHeader;
+var
+  I: Integer;
+  FirstSourceFile: String;
+begin
+  if FSoleUnit then
+    Exit;
+  Indent;
+  try
+    WriteHeading(Title);
+    if not Assigned(Units) or (Units.Count < 1) then
+      Exit;
+    // Put the first file at the front of the units
+    FirstSourceFile := PasDoc.SourceFileNames.FirstName;
+    for I := 0 to Pred(Units.Count) do
+      if (Units.UnitAt[I].SourceFileName = FirstSourceFile) and (I > 0) then
+      begin
+        Units.Exchange(0, I);
+        Break;
+      end;
+    WriteTableHeader(['Unit', 'File', 'Abstract']);
+    for I := 0 to Pred(Units.Count) do
+      with Units.UnitAt[I] do
+        WriteTableRow([MakeItemLink(Units.UnitAt[I], Name, lcNormal),
+          SourceFileName, AbstractDescription]);
+    WithEmptyLine();
+  finally
+    UnIndent;
+  end;
 end;
 
 procedure TMarkdownDocGenerator.WriteHintDirectives(const AItem: TPasItem);
@@ -1049,14 +1064,14 @@ begin
 
   if AItem.Attributes.Count > 0 then
   begin
-    WriteTableHeader(['Attribute'{'name'}, 'Value']);
+    WriteTableHeader(['Attribute', 'Value']);
     for I := 0 to Pred(AItem.Attributes.Count) do
       WriteTableRow([ConvertString(AItem.Attributes[I].Name), AItem.Attributes[I].Value]);
   end;
 
   if AItem.Params.Count > 0 then
   begin
-    WriteTableHeader(['Parameter'{'name'}, 'Description']);
+    WriteTableHeader(['Parameter', 'Description']);
     for I := 0 to Pred(AItem.Params.Count) do
       WriteTableRow([ConvertString(AItem.Params[I].Name), AItem.Params[I].Value]);
   end;
@@ -1068,7 +1083,7 @@ begin
 
   if AItem.Raises.Count > 0 then
   begin
-    WriteTableHeader(['Raises'{'name'}, 'Description']);
+    WriteTableHeader(['Raises', 'Description']);
     for I := 0 to Pred(AItem.Raises.Count) do
       WriteTableRow([CodeWithLinks(AItem, AItem.Raises[I].Name), AItem.Raises[I].Value]);
   end;
@@ -1080,7 +1095,7 @@ end;
 procedure TMarkdownDocGenerator.WriteDatesAuthor(const AItem: TPasItem;
   Header: Boolean);
 var
-  {Author, AuthorName, AuthorTail, AuthorAddress,} S3, S, S2, S1,
+  S3, S, S2, S1,
     Address: String;
 begin
   if AItem.Created.IsEmpty and AItem.LastMod.IsEmpty and (AItem.Authors.Count < 1) then
@@ -1263,11 +1278,35 @@ end;
 
 procedure TMarkdownDocGenerator.WriteDocumentation;
 begin
+
+  FSoleUnit := Assigned(Units) and (Units.Count = 1);
+
+  // No project name?
+  if not HasProjectName then
+    if FSoleUnit then
+      // Use the only unit name instead of 'docs'
+      ProjectName := Units.UnitAt[0].OutputFileName
+    else
+    begin
+      // More than one unit - name must be specified
+      DoMessage(1, pmtError, 'TMarkdownDocGenerator.WriteDocumentation: ' +
+        'Project name must be specified.', []);
+      Exit;
+    end;
+
+  if not CreateStream(ProjectName + GetFileExtension) then
+    Exit;
+
   inherited;
+
+  WriteProjHeader();
+
+  // Units were sorted by their name with FUnits.SortDeep(SortSettings)!
   WriteUnits(1);
-  WriteIntroduction;
-  WriteAdditionalFiles;
-  WriteConclusion;
+
+  WriteIntroduction();
+  WriteAdditionalFiles();
+  WriteConclusion();
 end;
 
 function TMarkdownDocGenerator.GetFileExtension: String;

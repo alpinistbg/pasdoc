@@ -434,6 +434,8 @@ procedure TPasdocOptions.InterpretCommandline(PasDoc: TPasDoc);
 
   function SetMarkdownOptions(Generator: TMarkdownDocGenerator): TDocGenerator;
   begin
+    Generator.HasProjectName := OptionName.WasSpecified;
+    Generator.PasDoc := PasDoc;
     Result := Generator;
   end;
 
