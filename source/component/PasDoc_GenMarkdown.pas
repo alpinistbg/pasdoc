@@ -785,15 +785,15 @@ begin
 
   Hdr := '';
   if AItem.HasDescription then
-    Hdr := AppSep(Hdr, LinkToAnchor('Description', AItem.QualifiedName + '-desc'), ' ');
+    Hdr := AppSep(Hdr, LinkToAnchor('\[Description\]', AItem.QualifiedName + '-desc'), ' ');
   if HasAncestors then
-    Hdr := AppSep(Hdr, LinkToAnchor('Hierarchy', AItem.QualifiedName + '-hier'), ' ');
+    Hdr := AppSep(Hdr, LinkToAnchor('\[Hierarchy\]', AItem.QualifiedName + '-hier'), ' ');
   if HasFields then
-    Hdr := AppSep(Hdr, LinkToAnchor('Fields', AItem.QualifiedName + '-fields'), ' ');
+    Hdr := AppSep(Hdr, LinkToAnchor('\[Fields\]', AItem.QualifiedName + '-fields'), ' ');
   if HasMethods then
-    Hdr := AppSep(Hdr, LinkToAnchor('Methods',  AItem.QualifiedName + '-mths'), ' ');
+    Hdr := AppSep(Hdr, LinkToAnchor('\[Methods\]',  AItem.QualifiedName + '-mths'), ' ');
   if HasProps then
-    Hdr := AppSep(Hdr, LinkToAnchor('Properties', AItem.QualifiedName + '-props'), ' ');
+    Hdr := AppSep(Hdr, LinkToAnchor('\[Properties\]', AItem.QualifiedName + '-props'), ' ');
 
   if not Hdr.IsEmpty then
   begin
