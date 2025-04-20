@@ -1,5 +1,5 @@
 {
-  Copyright 1998-2018 PasDoc developers.
+  Copyright 1998-2025 PasDoc developers.
 
   This file is part of "PasDoc".
 
@@ -20,7 +20,19 @@
   ----------------------------------------------------------------------------
 }
 
-{ @abstract(Markdown output generator.) }
+{ @abstract(Markdown output generator.)
+  @author(Yuliyan Ivanov)
+
+  Generates single .md file documentation in one of three flavors: original
+  markdown, GitHub flavor and Redmine (textile) flavor.
+
+  To select a specific flavor use suffix in the format option:
+  @longCode(
+    pasdoc --format=markdown ...
+    pasdoc --format=markdown-github ...
+    pasdoc --format=markdown-redmine ...
+  )
+}
 unit PasDoc_GenMarkdown;
 
 {$I pasdoc_defines.inc}
@@ -42,8 +54,6 @@ uses
 type
 
   TMarkdownVariant = (mdvOrig, mdvRedmine, mdvGithub);
-
-  { TMarkdownDocGenerator }
 
   TMarkdownDocGenerator = class(TDocGenerator)
   protected
@@ -161,7 +171,7 @@ const
     ( '~', '~', '</sub>'),  // mdvSubscriptRight,
     ( '-', '*', '-'),  // mdvUnorderedList,
     ( '1.', '#', '1.'),  // mdvOrderedList,
-    ( ':'+LE, ' := ', ''),  // mdvDefinitionList,
+    ( LE + ':', ' :=', LE + ':'),  // mdvDefinitionList,
     ( '`',  '@', '`'), // mdvInlCodeLeft
     ( '`',  '@', '`'), // mdvInlCodeRight
     ( '```',  '<pre><code class="pascal">', '```'), // mdvLongCodeBegin
@@ -203,7 +213,7 @@ end;
 
 function TMarkdownDocGenerator.FormatNote(const Text: string): String;
 begin
-  Result := '> ' + Text + LE + LE;
+  Result := LE + '> ' + Text + LE + LE;
 end;
 
 function TMarkdownDocGenerator.FormatPascalCode(const Line: String): String;
@@ -315,8 +325,10 @@ begin
   else repeat
     FoundPos := P;
     S := ExtractSubstr(Result, P, IdentDelims);
-    if S.IsEmpty or (S[1] in IdentNonStart) then
+    if S.IsEmpty then
       Break;
+    if S[1] in IdentNonStart then
+      Continue;
     FoundItem := SearchItem(S, AItem, False);
     if Assigned(FoundItem) then
     begin
@@ -403,8 +415,7 @@ begin
 
     if U.CIOs.Count > 0 then
     begin
-      //WriteHeading('Classes, Interfaces, Objects and Records');
-      WriteTableHeader(['Classes, Interfaces, Objects and Records'{'Name'}, 'Description']);
+      WriteTableHeader(['Classes, Interfaces, Objects and Records', 'Description']);
       for I := 0 to Pred(U.CIOs.Count) do
         with U.CIOs.PasItemAt[I] as TPasCIO do
           WriteTableRow([
@@ -416,8 +427,7 @@ begin
 
     if U.FuncsProcs.Count > 0 then
     begin
-      //WriteHeading('Functions and Procedures');
-      WriteTableHeader(['Functions and Procedures'{'Name'}, 'Description']);
+      WriteTableHeader(['Functions and Procedures', 'Description']);
       for I := 0 to Pred(U.FuncsProcs.Count) do
         with U.FuncsProcs.PasItemAt[I] as TPasRoutine do
           WriteTableRow([
@@ -429,10 +439,8 @@ begin
 
     if U.Types.Count > 0 then
     begin
-      //WriteHeading('Types');
-      WriteTableHeader(['Types'{'Name'}, 'Description']);
+      WriteTableHeader(['Types', 'Description']);
       for I := 0 to Pred(U.Types.Count) do
-        // Gives a typecast exception on a procedure of object type
         with U.Types.PasItemAt[I] {as TPasType} do
           WriteTableRow([
             CodeWithLinks(U, FullDeclaration),
@@ -443,8 +451,7 @@ begin
 
     if U.Constants.Count > 0 then
     begin
-      //WriteHeading('Constants');
-      WriteTableHeader(['Constants'{'Name'}, 'Description']);
+      WriteTableHeader(['Constants', 'Description']);
       for I := 0 to Pred(U.Constants.Count) do
         with U.Constants.PasItemAt[I] as TPasConstant do
           WriteTableRow([
@@ -456,8 +463,7 @@ begin
 
     if U.Variables.Count > 0 then
     begin
-      //WriteHeading('Variables');
-      WriteTableHeader(['Variables'{'Name'}, 'Description']);
+      WriteTableHeader(['Variables', 'Description']);
       for I := 0 to Pred(U.Variables.Count) do
         with U.Variables.PasItemAt[I] do
           WriteTableRow([
@@ -498,7 +504,6 @@ begin
       WriteHeading('Types');
       Indent;
       for I := 0 to Pred(U.Types.Count) do
-        // Gives a typecast exception on a procedure of object type
         WriteType(U.Types.PasItemAt[I] {as TPasType});
       WithEmptyLine();
       UnIndent;
@@ -511,6 +516,7 @@ begin
       for I := 0 to Pred(U.Constants.Count) do
         WriteConstant(U.Constants.PasItemAt[I] as TPasConstant);
       WithEmptyLine();
+      UnIndent;
     end;
 
     if U.Variables.Count > 0 then
@@ -527,6 +533,7 @@ begin
 
   end;
 
+  // Additional space after
   WithEmptyLine(BR);
 
   UnIndent;
@@ -545,25 +552,25 @@ begin
   WriteHeading(ExternalItem.Title, ExternalItem.FullLink);
   WriteDatesAuthor(ExternalItem, True);
   WithEmptyLine(ExternalItem.DetailedDescription);
-  WithEmptyLine(BR);
+  WithEmptyLine(BR); // Additional space after
 end;
 
 function TMarkdownDocGenerator.FormatSection(HL: integer; const Anchor: String;
   const Caption: String): String;
 begin
-  Result := AppendEmptyLine(LE + LE + Hn(HL) + AppSep(Caption, FormatAnchor(Anchor), ' '));
+  Result := AppendEmptyLine(LE + LE + Hn(HL) +
+    AppSep(Caption, FormatAnchor(Anchor), ' '));
 end;
 
 function TMarkdownDocGenerator.FormatAnchor(const Anchor: String): String;
 begin
   Result := '';
-  if Anchor.IsEmpty then
-    Exit;
-  case FVariant of
-    mdvOrig: Result := '{#' + Anchor + '}';
-    mdvRedmine: Result := '(#' + Anchor + ')';
-    mdvGithub: Result := '<a name="' + GithubAnchor(Anchor) + '"></a>';
-  end;
+  if not Anchor.IsEmpty then
+    case FVariant of
+      mdvOrig: Result := '{#' + Anchor + '}';
+      mdvRedmine: Result := '(#' + Anchor + ')';
+      mdvGithub: Result := '<a name="' + GithubAnchor(Anchor) + '"></a>';
+    end;
 end;
 
 function TMarkdownDocGenerator.FormatTableHeader(AHeaders: TStringArray
@@ -627,30 +634,52 @@ const
   ListTag: array[TListType] of String =
   ( '- ', '1. ', '' );
 var
-  I: Integer;
   ListItem: TListItemData;
-begin
-  // Re-init the tags table
-  ListTag[ltUnordered] := MdElement[mdvUnorderedList, FVariant];
-  ListTag[ltOrdered] := MdElement[mdvOrderedList, FVariant];
-  ListTag[ltDefinition] := MdElement[mdvDefinitionList, FVariant];
+  I: Integer;
+  ItemText: String;
 
-  Result := LE + LE;
+  // Do some trickery to increase indent of the nested lists
+  function IncIndent(AItem: String): String;
+  var
+    Lines: SysUtils.TStringArray;
+    I: Integer;
+    J: TListType;
+    Inset: SizeInt;
+  begin
+    Lines := AItem.Split([LE]);
+    Result := Lines[0];
+    for I := 1 to High(Lines) do
+    begin
+      Inset := 0;
+      for J in {TListType}[ltUnordered..ltOrdered] do
+        if StartsStr(ListTag[J], TrimLeft(Lines[I])) then
+          Inset := Length(ListTag[J]);
+      Lines[I] := StringOfChar(' ', Inset) + Lines[I];
+      Result := AppSep(Result, Lines[I], LE);
+    end;
+  end;
+
+begin
+  // Rewrite the tags table
+  ListTag[ltUnordered] := MdElement[mdvUnorderedList, FVariant] + ' ';
+  ListTag[ltOrdered] := MdElement[mdvOrderedList, FVariant] + ' ';
+  ListTag[ltDefinition] := MdElement[mdvDefinitionList, FVariant] + ' ';
+
+  Result := LE;
   for I := 0 to ListData.Count - 1 do
   begin
     ListItem := ListData.Items[I] as TListItemData;
-    if ListData.ListType = ltDefinition then
-    begin
-      Result := Result + ListItem.ItemLabel + LE + ': ' + ListItem.Text;
-      //Result := Result + AppSep(ListItem.ItemLabel, ListItem.Text, LE + ': ');
-      //if IsML(Result) then
-      //  Result := Result + '=:';
-    end
-    else
-      Result := Result + ListItem.Text;
+    ItemText := IncIndent(ListItem.Text);
+    case ListData.ListType of
+      ltUnordered, ltOrdered:
+        Result := Result + ListTag[ListData.ListType] + ItemText;
+      ltDefinition:
+        Result := Result + ListItem.ItemLabel +
+          ListTag[ListData.ListType] + ItemText + LE;
+    end;
     Result := Result + LE;
   end;
-  Result := Result + LE + LE; //?
+  Result := Result + LE;
 end;
 
 function TMarkdownDocGenerator.ItemDescription(AItem: TPasItem): String;
@@ -722,22 +751,15 @@ procedure TMarkdownDocGenerator.WriteType(const AItem: TPasItem);
   var
     I: Integer;
   begin
-    WriteTableHeader(['Enum', 'Declaration', 'Comment']);
+    WriteTableHeader(['enum member', 'Declaration', 'Comment']);
     for I := 0 to Pred(Item.Members.Count) do
       with Item.Members.PasItemAt[I] do
-      //WriteConstant(Item.Members.PasItemAt[i]);
       WriteTableRow([Name, OneLineCodeString(FullDeclaration), AbstractDescription]);
   end;
 
 begin
   WriteHeading('Type ' + DistinctName(AItem), AItem.QualifiedName);
-  WriteTableHeader([AItem.Name, '']);
-  WriteTableRow(['declaration', OneLineCodeString(AItem.FullDeclaration)]);
-  WriteTableRow(['visibility', VisToStr(AItem.Visibility)]);
-  WithEmptyLine();
-
-  WriteDescription(AItem);
-  WithEmptyLine();
+  WritePasItem(AItem);
 
   if AItem is TPasEnum then
   begin
@@ -832,9 +854,8 @@ begin
 
     if HasFields then
     begin
-      //WriteHeading('Fields', AItem.QualifiedName + '-fields');
       WriteDirectLine(FormatAnchor(AItem.QualifiedName + '-fields'));
-      WriteTableHeader(['Field'{'Name'}, '', 'Description']);
+      WriteTableHeader(['Field', '', 'Description']);
       for I := 0 to Pred(AItem.Fields.Count) do
         with AItem.Fields.PasItemAt[I] do
           WriteTableRow([
@@ -847,9 +868,8 @@ begin
 
     if HasMethods then
     begin
-      //WriteHeading('Methods', AItem.QualifiedName + '-mths');
       WriteDirectLine(FormatAnchor(AItem.QualifiedName + '-mths'));
-      WriteTableHeader(['Method'{'Name'}, '', 'Description']);
+      WriteTableHeader(['Method', '', 'Description']);
       for I := 0 to Pred(AItem.Methods.Count) do
         with AItem.Methods.PasItemAt[I] as TPasRoutine do
           with AItem.Methods.PasItemAt[I] do
@@ -863,9 +883,8 @@ begin
 
     if HasProps then
     begin
-      //WriteHeading('Properties', AItem.QualifiedName + '-props');
       WriteDirectLine(FormatAnchor(AItem.QualifiedName + '-props'));
-      WriteTableHeader(['Property'{'Name'}, '', 'Description']);
+      WriteTableHeader(['Property', '', 'Description']);
       for I := 0 to Pred(AItem.Properties.Count) do
         with AItem.Properties.PasItemAt[I] as TPasProperty do
           with AItem.Properties.PasItemAt[I] do
@@ -1021,6 +1040,8 @@ begin
 end;
 
 procedure TMarkdownDocGenerator.WritePasItem(const AItem: TPasItem);
+const
+  ParamsHeader: TStringArray = ('Parameter', 'Description');
 var
   I: Integer;
   TypeStr, HereLink, LinksText, LinksMore, S, S1, S2, S3, Address: String;
@@ -1028,11 +1049,15 @@ var
 begin
   TypeStr := ItemTypeStr(AItem);
 
+  // REMOVE BEFORE FLIGHT !!!!
+  if (AItem is TPasRoutine) and (AItem.Name = 'Sale') then
+    S := AItem.FullDeclaration;
+
   // Link to the current item
   HereLink := MakeItemLink(AItem, AItem.Name, lcCode);
   Links := TStringList.Create;
   try
-    CodeWithLinks(AItem.MyUnit, AItem.FullDeclaration, Links);
+    CodeWithLinks(AItem, AItem.FullDeclaration, Links);
     I := Links.IndexOf(HereLink);
     if I > -1 then
       Links.Delete(I); // Delete link to the current item
@@ -1049,14 +1074,14 @@ begin
     LinksMore := CioTypeToString(AItem.MyObject.MyType) + ' ' +
       MakeItemLink(AItem.MyObject, AItem.MyObject.Name, lcCode);
   // Containing unit
-  if Assigned(AItem.MyUnit) then
+  if Assigned(AItem.MyUnit) and not FSoleUnit then
     LinksMore := AppSep(LinksMore, 'unit ' +
       MakeItemLink(AItem.MyUnit, AItem.MyUnit. Name, lcCode), ', ');
 
   LinksText := AppSep(LinksText, LinksMore, ', ');
 
   WriteTableHeader([TypeStr, AItem.Name]);
-  WriteTableRow(['declaration', AItem.FullDeclaration]);
+  WriteTableRow(['declaration', OneLineCodeString(AItem.FullDeclaration)]);
   WriteTableRow(['visibility', VisToStr(AItem.Visibility)]);
   if not LinksText.IsEmpty then
     WriteTableRow(['related', LinksText]);
@@ -1077,14 +1102,20 @@ begin
 
   if AItem.Params.Count > 0 then
   begin
-    WriteTableHeader(['Parameter', 'Description']);
+    WriteTableHeader(ParamsHeader);
     for I := 0 to Pred(AItem.Params.Count) do
       WriteTableRow([AItem.Params[I].Name, AItem.Params[I].Value]);
   end;
 
   if AItem is TPasRoutine then
+  begin
     if TPasRoutine(AItem).Returns <> '' then
-       WriteTableRow([FormatItalic('(result)'), TPasRoutine(AItem).Returns]);
+    begin
+      if AItem.Params.Count < 1 then
+        WriteTableHeader(ParamsHeader);
+      WriteTableRow([FormatItalic('(returns)'), TPasRoutine(AItem).Returns]);
+    end;
+  end;
   WithEmptyLine();
 
   if AItem.Raises.Count > 0 then
