@@ -49,7 +49,8 @@ uses
   PasDoc_StringVector,
   PasDoc_Types,
   PasDoc_StringPairVector,
-  PasDoc_Base;
+  PasDoc_Base, 
+  PasDoc_HierarchyTree;
 
 type
 
@@ -537,6 +538,7 @@ begin
   WithEmptyLine(BR);
 
   UnIndent;
+  HR;
 end;
 
 function TMarkdownDocGenerator.DistinctName(const AItem: TPasItem): String;
@@ -948,8 +950,9 @@ end;
 
 procedure TMarkdownDocGenerator.WriteProjHeader;
 var
-  I: Integer;
-  FirstSourceFile: String;
+  I, Level, ULInset: Integer;
+  FirstSourceFile, UL: String;
+  Node: TPasItemNode;
 begin
   if FSoleUnit then
     Exit;
@@ -970,6 +973,31 @@ begin
       WriteTableRow([MakeItemLink(Units.UnitAt[I], Name, lcNormal),
         SourceFileName, AbstractDescription]);
   WithEmptyLine();
+
+  CreateClassHierarchy;
+  if FClassHierarchy.IsEmpty then
+  else
+  begin
+    UL := MdElement[mdvUnorderedList, FVariant] + ' ';
+    ULInset := Length(UL);
+    WriteHeading('Class hierarchy');
+    Node := FClassHierarchy.FirstItem;
+    while Assigned(Node) do
+    begin
+      WriteDirect(StringOfChar(' ', Node.Level * ULInset) + UL);
+      if not Assigned(Node.Item) then
+        WriteDirectLine(Node.Name)
+      else
+         WriteDirectLine(MakeItemLink(Node.Item,
+           Node.Item.UnitRelativeQualifiedName, lcNormal));
+      Node := FClassHierarchy.NextItem(Node);
+    end;
+  end;
+
+  // Additional space after
+  WithEmptyLine(BR);
+
+  HR;
 end;
 
 procedure TMarkdownDocGenerator.WriteHintDirectives(const AItem: TPasItem);
@@ -1321,6 +1349,8 @@ begin
   finally
     CloseStream;
   end;
+
+  //with TMarkdownProcessor
 end;
 
 function TMarkdownDocGenerator.GetFileExtension: String;
