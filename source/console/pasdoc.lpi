@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <CONFIG>
   <ProjectOptions>
-    <Version Value="9"/>
+    <Version Value="12"/>
     <PathDelim Value="\"/>
     <General>
       <Flags>
@@ -9,9 +9,10 @@
         <MainUnitHasUsesSectionForAllUnits Value="False"/>
         <MainUnitHasCreateFormStatements Value="False"/>
         <MainUnitHasTitleStatement Value="False"/>
+        <MainUnitHasScaledStatement Value="False"/>
         <LRSInOutputDirectory Value="False"/>
+        <CompatibilityMode Value="True"/>
       </Flags>
-      <MainUnit Value="0"/>
       <Title Value="pasdoc"/>
     </General>
     <BuildModes Count="1">
@@ -19,30 +20,36 @@
     </BuildModes>
     <PublishOptions>
       <Version Value="2"/>
-      <IgnoreBinaries Value="False"/>
-      <IncludeFileFilter Value="*.(pas|pp|inc|lfm|lpr|lrs|lpi|lpk|sh|xml)"/>
-      <ExcludeFileFilter Value="*.(bak|ppu|ppw|o|so);*~;backup"/>
     </PublishOptions>
     <RunParams>
-      <local>
-        <FormatVersion Value="1"/>
-        <CommandLineParams Value="..\..\tests\ok_record_case_parsing.pas --output=\tmp\"/>
-        <LaunchingApplication Use="True" PathPlusParams="\usr\X11R6\bin\xterm -T 'Lazarus Run Output' -e $(LazarusDir)\tools\runwait.sh $(TargetCmdLine)"/>
-      </local>
+      <FormatVersion Value="2"/>
     </RunParams>
-    <RequiredPackages Count="1">
+    <RequiredPackages Count="2">
       <Item1>
-        <PackageName Value="pasdoc_package"/>
+        <PackageName Value="MarkdownEngine"/>
       </Item1>
+      <Item2>
+        <PackageName Value="pasdoc_package"/>
+      </Item2>
     </RequiredPackages>
-    <Units Count="1">
+    <Units Count="2">
       <Unit0>
         <Filename Value="pasdoc.dpr"/>
         <IsPartOfProject Value="True"/>
-        <IsVisibleTab Value="True"/>
-        <UsageCount Value="20"/>
+        <TopLine Value="43"/>
+        <CursorPos Y="64"/>
+        <UsageCount Value="205"/>
         <Loaded Value="True"/>
       </Unit0>
+      <Unit1>
+        <Filename Value="..\..\..\fpc-markdown\source\MarkdownUtils.pas"/>
+        <IsPartOfProject Value="True"/>
+        <EditorIndex Value="5"/>
+        <TopLine Value="935"/>
+        <CursorPos Y="944"/>
+        <UsageCount Value="21"/>
+        <Loaded Value="True"/>
+      </Unit1>
     </Units>
   </ProjectOptions>
   <CompilerOptions>
@@ -50,6 +57,7 @@
     <PathDelim Value="\"/>
     <SearchPaths>
       <IncludeFiles Value="..\component"/>
+      <OtherUnitFiles Value="..\..\..\fpc-markdown\source"/>
     </SearchPaths>
     <Parsing>
       <SyntaxOptions>
@@ -66,6 +74,12 @@
       </Checks>
       <VerifyObjMethodCallValidity Value="True"/>
     </CodeGeneration>
+    <Linking>
+      <Debugging>
+        <DebugInfoType Value="dsDwarf2Set"/>
+        <UseExternalDbgSyms Value="True"/>
+      </Debugging>
+    </Linking>
     <Other>
       <Verbosity>
         <ShowHints Value="False"/>
@@ -73,6 +87,50 @@
     </Other>
   </CompilerOptions>
   <Debugging>
+    <BreakPoints Count="5">
+      <Item1>
+        <Kind Value="bpkSource"/>
+        <WatchScope Value="wpsLocal"/>
+        <WatchKind Value="wpkWrite"/>
+        <Source Value="..\component\PasDoc_GenMarkdown.pas"/>
+        <InitialEnabled Value="False"/>
+        <Line Value="1081"/>
+      </Item1>
+      <Item2>
+        <Kind Value="bpkSource"/>
+        <WatchScope Value="wpsLocal"/>
+        <WatchKind Value="wpkWrite"/>
+        <Source Value="..\component\PasDoc_GenMarkdown.pas"/>
+        <InitialEnabled Value="False"/>
+        <Line Value="1087"/>
+      </Item2>
+      <Item3>
+        <Kind Value="bpkSource"/>
+        <WatchScope Value="wpsLocal"/>
+        <WatchKind Value="wpkWrite"/>
+        <Source Value="..\component\PasDoc_TagManager.pas"/>
+        <Line Value="887"/>
+      </Item3>
+      <Item4>
+        <Kind Value="bpkSource"/>
+        <WatchScope Value="wpsLocal"/>
+        <WatchKind Value="wpkWrite"/>
+        <Source Value="pasdoc.dpr"/>
+        <Line Value="64"/>
+      </Item4>
+      <Item5>
+        <Kind Value="bpkSource"/>
+        <WatchScope Value="wpsLocal"/>
+        <WatchKind Value="wpkWrite"/>
+        <Source Value="..\..\..\fpc-markdown\source\MarkdownDaringFireball.pas"/>
+        <Line Value="105"/>
+      </Item5>
+    </BreakPoints>
+    <Watches Count="1">
+      <Item1>
+        <Expression Value="ListItem"/>
+      </Item1>
+    </Watches>
     <Exceptions Count="2">
       <Item1>
         <Name Value="ECodetoolError"/>

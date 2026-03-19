@@ -50,7 +50,7 @@ uses
   PasDoc_Types,
   PasDoc_StringPairVector,
   PasDoc_Base, 
-  PasDoc_HierarchyTree;
+  PasDoc_HierarchyTree, MarkdownProcessor, MarkdownUtils;
 
 type
 
@@ -1319,7 +1319,148 @@ begin
   FIndent := 1;
 end;
 
+const
+  CSSDecoration =
+    '<style type="text/css">'#10+
+
+    'html, body {'#10+
+    '	padding: 0 26px;'#10+
+    '	word-wrap: break-word;'#10+
+    '}'#10+
+
+    'body {'#10+
+    '  font-family: -apple-system, BlinkMacSystemFont, ''Segoe WPC'','+
+      '''Segoe UI'', system-ui, ''Ubuntu'', ''Droid Sans'', sans-serif;'#10+
+    '  font-size: 14px;'#10+
+    '  line-height: 1.6;'#10+
+    '}'#10+
+
+    'p { margin-bottom: 16px; }'#10+
+
+    'li p {'#10+
+    '	margin-bottom: 0.7em;'#10+
+    '}'#10+
+
+    'ul,'#10+
+    'ol {'#10+
+    '	margin-bottom: 0.7em;'#10+
+    '}'#10+
+
+    'hr {'#10+
+    '	border: 0;'#10+
+    '	height: 1px;'#10+
+    '	border-bottom: 1px solid;'#10+
+    '}'#10+
+
+    'h1 {'#10+
+    '	font-size: 2em;'#10+
+    '	margin-top: 0;'#10+
+    '	padding-bottom: 0.3em;'#10+
+    '	border-bottom-width: 1px;'#10+
+    '	border-bottom-style: solid;'#10+
+    '}'#10+
+    'h2 {'#10+
+    '	font-size: 1.5em;'#10+
+    '	padding-bottom: 0.3em;'#10+
+    '	border-bottom-width: 1px;'#10+
+    '	border-bottom-style: solid;'#10+
+    '}'#10+
+    'h3 {'#10+
+    '	font-size: 1.25em;'#10+
+    '}'#10+
+    'h4 {'#10+
+    '	font-size: 1em;'#10+
+    '}'#10+
+    'h5 {'#10+
+    '	font-size: 0.875em;'#10+
+    '}'#10+
+    'h6 {'#10+
+    '	font-size: 0.85em;'#10+
+    '}'#10+
+
+    'table {'#10+
+    '	border-collapse: collapse;'#10+
+    '	margin-bottom: 0.7em;'#10+
+    '}'#10+
+    'th {'#10+
+    '	text-align: left;'#10+
+    '	border-bottom: 1px solid;'#10+
+    '}'#10+
+    'th,'#10+
+    'td {'#10+
+    '	padding: 5px 10px;'#10+
+    '}'#10+
+    'table > tbody > tr + tr > td {'#10+
+    '	border-top: 1px solid;'#10+
+    '	border-color: rgba(0, 0, 0, 0.18);'#10+
+    '}'#10+
+
+    'blockquote {'#10+
+    '	margin: 0;'#10+
+    '	padding: 0px 16px 0 10px;'#10+
+    '	border-left-width: 5px;'#10+
+    '	border-left-style: solid;'#10+
+    '	border-radius: 2px;'#10+
+    '}'#10+
+
+    'code {'#10+
+    '	font-family: var(--vscode-editor-font-family, '+
+    '"SF Mono", Monaco, Menlo, Consolas, "Ubuntu Mono", "Liberation Mono", '+
+    '"DejaVu Sans Mono", "Courier New", monospace);'#10+
+    '	font-size: 1em;'#10+
+    '	line-height: 1.357em;'#10+
+    '}'#10+
+
+    'th {'#10+
+    '   border-color: rgba(0, 0, 0, 0.69);'#10+
+    '}'#10+
+
+    'h1,h2,hr,td {'#10+
+    '	border-color: rgba(0, 0, 0, 0.18);'#10+
+    '}'#10+
+
+
+    //'code{'#10+
+    //'  color: #A00;'#10+
+    //'}'#10+
+    'pre{'#10+
+    '  background: #f4f4f4;'#10+
+    '  border: 1px solid #ddd;'#10+
+    '  border-left: 3px solid #f36d33;'#10+
+    '  color: #555;'#10+
+    '  overflow: auto;'#10+
+    '  padding: 1em 1.5em;'#10+
+    '  display: block;'#10+
+    '}'#10+
+    'pre code{'#10+
+    '  color: inherit;'#10+
+    '}'#10+
+    //'Blockquote{'#10+
+    //'  border-left: 3px solid #d0d0d0;'#10+
+    //'  padding-left: 0.5em;'#10+
+    //'  margin-left:1em;'#10+
+    //'}'#10+
+    //'Blockquote p{'#10+
+    //'  margin: 0;'#10+
+    //'}'#10+
+    //'table{'#10+
+    //'  border:1px solid;'#10+
+    //'  border-collapse:collapse;'#10+
+    //'}'#10+
+    //'th{'+
+    //'  padding:5px;'#10+
+    //'  background: #e0e0e0;'#10+
+    //'  border:1px solid;'#10+
+    //'}'#10+
+    //'td{'#10+
+    //'  padding:5px;'#10+
+    //'  border:1px solid;'#10+
+    //'}'#10+
+    '</style>'#10;
+
 procedure TMarkdownDocGenerator.WriteDocumentation;
+var
+  ZZZZ: String;
 begin
   FSoleUnit := Assigned(Units) and (Units.Count = 1);
 
@@ -1350,7 +1491,24 @@ begin
     CloseStream;
   end;
 
-  //with TMarkdownProcessor
+  with TMarkdownProcessor.CreateDialect(mdCommonMark) do
+    try
+      //ZZZZ := processFile(DestinationDirectory + ProjectName + GetFileExtension);
+      ZZZZ := process(
+      '- Item 1' + LE +
+      '  - Item 1.1' + LE +
+      '    - Item 1.1.1' + LE +
+      '    - Item 1.1.2' + LE +
+      '- Item 2' + LE
+      );
+      StringToFile(DestinationDirectory + ProjectName + '.html',
+        '<!DOCTYPE html> <html> <head>  <meta charset="UTF-8">' +
+        //'    <title>' + Title + '</title>' +
+        //{'<style>' +} CSSDecoration {+ '</style>'} +
+        '</head><body>' + LE + ZZZZ + '</body></html>');
+    finally
+      Free;
+    end;
 end;
 
 function TMarkdownDocGenerator.GetFileExtension: String;
