@@ -984,7 +984,9 @@ begin
     Node := FClassHierarchy.FirstItem;
     while Assigned(Node) do
     begin
-      WriteDirect(StringOfChar(' ', Node.Level * ULInset) + UL);
+      WriteDirect(UL +
+        ReplaceStr(StringOfChar(' ', Pred(Node.Level) * ULInset), ' ', '&nbsp;')
+        { + UL});
       if not Assigned(Node.Item) then
         WriteDirectLine(Node.Name)
       else
